@@ -223,28 +223,26 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, 
     VA_coeff = ifelse.(isnan.(VA_coeff), 1.0, VA_coeff) # some entries in Y equal to zero => NaN, assume VA coefficient to be 1
 
 
-    # Country level trade balance (WRONG! => if correct α below is the same with both calculations)
+    # Country level trade balance (exports - imports)
     # used computation in Antras and Chor (2018) quite different
     # need to calculate country level exports/imports (row/columns) (i.e. aggregate and remove intra-country trade)
 
-    E_Z = [sum(Z[i:i+S-1,:]) for i in 1:S:N*S] .- [sum(Z[i:i+S-1,i:i+S-1]) for i in 1:S:N*S] # N×1
-    E_F = [sum(F[i:i+S-1,:]) for i in 1:S:N*S] .- [sum(F[i:i+S-1,ceil(Int, i/S)]) for i in 1:S:N*S] # N×1
-    E = E_Z .+ E_F # N×1
+    E = [sum(Y[i:i+S-1]) - sum(Z[i:i+S-1,i:i+S-1]) - sum(F[i:i+S-1,ceil(Int, i/S)]) for i in 1:S:N*S]
 
-    M_Z = [sum(Z[:,i:i+S-1]) for i in 1:S:N*S] .- [sum(Z[i:i+S-1,i:i+S-1]) for i in 1:S:N*S] # N×1
-    M_F = [sum(F[:,i]) for i in 1:N] .- [sum(F[i,i]) for i in 1:N] # N×1
-    M = M_Z .+ M_F # N×1
+    M_Z = [sum(Z[:,j:j+S-1]) - sum(Z[j:j+S-1,j:j+S-1]) for j in 1:S:N*S]
+    M_F = [sum(F[:,ceil(Int, j/S)]) - sum(F[j:j+S-1,ceil(Int, j/S)]) for j in 1:S:N*S]
+    M = M_Z .+ M_F
 
     TB_ctry = E .- M # N×1
 
     # Country level value added
     VA_ctry = [sum(VA[i:i+S-1]) for i in 1:S:N*S] # N×1
 
-    # Final demand at country level
+    # Final import demand at country level (sum over rows not columns - would give export demand)
     F = ifelse.(iszero.(F), 1e-18, F) # Antras and Chor (2018)
-    F_ctry = [sum(F[i:i+S-1,:]) for i in 1:S:N*S] # N×1
+    F_ctry = [sum(F[:,j]) for j in 1:N] # N×1
 
-    # Country-industry final consumption expenditure shares
+    # Country-industry final consumption expenditure (import) shares
     # sum over reporting country
     sF = zeros(S, N) # S×N
     for i in 1:S
@@ -255,10 +253,10 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, 
         end
     end
 
-    # do not perfectly sum to 1 (sometimes quite big difference 0.66 vs 1?)
-    α = [sF[i,j]/F_ctry[j] for i in 1:S, j in 1:N] # S×N, as in code of Antras and Chor (2018)
-    #α = [sF[i,j]/(VA_ctry[j]+TB_ctry[j]) for i in 1:S, j in 1:N] # S×N, as in equation (38) of Antras and Chor (2018)
-    # results are not the same!
+    α = [sF[i,j]/F_ctry[j] for i in 1:S, j in 1:N] # S×N, as in code of Antras and Chor (2018), columns sum to 1
+    α2 = [sF[i,j]/(VA_ctry[j]+TB_ctry[j]) for i in 1:S, j in 1:N] # S×N, as in equation (38) of Antras and Chor (2018)
+    # although F_ctry = VA_ctry .+ TB_ctry holds true for most countries, 
+    # but α2 considerably different (does not sum to 1) ---- WHY?
 
     return γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry
 end
@@ -271,7 +269,16 @@ Z, F, Y = inventory_adjustment(Z, F, IV, N, S)
 γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, N, S)
 
 
-n = [sum(α[:,j]) for j in 1:N]
-
 m = VA_ctry .- F_ctry
-TB_ctry ≈ m
+TB_ctry
+n = TB_ctry - m
+
+n = [TB_ctry m]
+
+a = [sum(u[:,i]) for i in 1:N]
+a2 = [sum(α[:,i]) for i in 1:N]
+
+
+n = VA_ctry .- TB_ctry
+F_ctry
+a = n .≈ F_ctry
