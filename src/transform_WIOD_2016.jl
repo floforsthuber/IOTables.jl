@@ -17,7 +17,7 @@ The function loads the WIOD Input-Output Table of specified year as DataFrame in
 
 # Examples
 ```julia-repl
-julia> import_R(dir, 2012)
+julia> WIOD_2012 = import_R(dir, 2012)
 ```
 """
 function import_R(dir::String, year::Integer)
@@ -49,7 +49,7 @@ The function creates the origin country-industry destination country-industry in
 
 # Examples
 ```julia-repl
-julia> create_Z_VA(name_of_dataframe, N, S)
+julia> Z, VA = create_Z_VA(WIOD_2012, N, S)
 ```
 """
 function create_Z_VA(df::DataFrame, N::Integer, S::Integer)
@@ -90,7 +90,7 @@ extracts the origin country-industry destination country inventory change vector
 
 # Examples
 ```julia-repl
-julia> create_F_IV(name_of_dataframe, N, S)
+julia> F, IV = create_F_IV(name_of_dataframe, N, S)
 ```
 """
 function create_F_IV(df::DataFrame, N::Integer, S::Integer)
@@ -136,7 +136,7 @@ The function performs the coutry-industry inventory adjustments.
 
 # Examples
 ```julia-repl
-julia> inventory_adjustment(Z, F, IV, N, S)
+julia> Z, F, Y = inventory_adjustment(Z, F, IV, N, S)
 ```
 """
 function inventory_adjustment(Z::Matrix, F::Matrix, IV::Matrix, N::Integer, S::Integer)
@@ -181,16 +181,16 @@ The function computes the country value added vector VA_ctry respecting inventor
 - `S::Integer`: number of origin/destination industries.
 
 # Output
-- `γ::Matrix{Float64}`: S×N, country-industry intermediate input expenditure share matrix γ.
+- `γ::Matrix{Float64}`: S×NS, country-industry intermediate input expenditure share matrix γ.
 - `α::Matrix{Float64}`: S×N, country-industry final expenditure expenditure share matrix α.
-- `VA_coeff::Vector{Float64}`: NS×1, country value added coefficients vector VA_coeff.
+- `VA_coeff::Vector{Float64}`: NS×1, country-industry value added coefficients vector VA_coeff.
 - `TB_ctry::Vector{Float64}`: NS×1, country trade balance (X-M) vector TB.
 - `VA_ctry::Vector{Float64}`: N×1, country value added vector VA_ctry.
 - `F_ctry::Vector{Float64}`: N×1, country final import demand vector VA_ctry.
 
 # Examples
 ```julia-repl
-julia> create_expenditure_shares(Z, F, Y, VA, N, S)
+julia> γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, VA, N, S)
 ```
 """
 function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, S::Integer)
@@ -279,7 +279,7 @@ The function computes the origin country-industry destination country intermedia
 
 # Examples
 ```julia-repl
-julia> create_trade_shares(Z, F, N, S)
+julia> π_Z, π_F = create_trade_shares(Z, F, N, S)
 ```
 """
 function create_trade_shares(Z::Matrix, F::Matrix, N::Integer, S::Integer)
@@ -313,21 +313,21 @@ The function imports and transforms the raw data for further use in the model.
 - `year::Integer`: specifies the year of the WIOD table which should be imported.
 
 # Output
-- `Z::Matrix`: NS×NS, origin country-industry destination country-industry intermediate demand matrix Z.
-- `F::Matrix`: NS×N, origin country-industry destination country final demand matrix F.
-- `Y::Vector`: NS×1, origin country-industry gross output vector Y.
+- `Z::Matrix{Float64}`: NS×NS, origin country-industry destination country-industry intermediate demand matrix Z.
+- `F::Matrix{Float64}`: NS×N, origin country-industry destination country final demand matrix F.
+- `Y::Vector{Float64}`: NS×1, origin country-industry gross output vector Y.
 - `F_ctry::Vector{Float64}`: N×1, country final import demand vector VA_ctry.
 - `TB_ctry::Vector{Float64}`: NS×1, country trade balance (X-M) vector TB.
 - `VA_ctry::Vector{Float64}`: N×1, country value added vector VA_ctry.
-- `VA_coeff::Vector{Float64}`: NS×1, country value added coefficients vector VA_coeff.
-- `γ::Matrix{Float64}`: S×N, country-industry intermediate input expenditure share matrix γ.
+- `VA_coeff::Vector{Float64}`: NS×1, country-industry value added coefficients vector VA_coeff.
+- `γ::Matrix{Float64}`: S×NS, country-industry intermediate input expenditure share matrix γ.
 - `α::Matrix{Float64}`: S×N, country-industry final expenditure expenditure share matrix α.
 - `π_Z::Matrix{Float64}`: NS×NS, origin country-industry destination country-industry intermediate goods trade share matrix π_Z.
-- `π_F::Matrix{Float64}`: NS×N, origin country-industry destination country foods goods trade share matrix π_Z.
+- `π_F::Matrix{Float64}`: NS×N, origin country-industry destination country final goods trade share matrix π_F.
 
 # Examples
 ```julia-repl
-julia> transform_WIOD_2016(dir, 2012)
+julia> Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_WIOD_2016(dir, 2014)
 ```
 """
 function transform_WIOD_2016(dir::String, year::Integer)
