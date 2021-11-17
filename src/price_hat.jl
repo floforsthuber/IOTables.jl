@@ -2,7 +2,7 @@
 # Script to obtain the price index
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-using DataFrames, RData
+using DataFrames, RData, LinearAlgebra, Statistics
 
 include("transform_WIOD_2016.jl") # Script with functions to import and transform raw data
 
@@ -63,15 +63,15 @@ The function performs computes the optimal price indices conditional on the econ
 - `θ::Vector`: NS×1, country-industry trade elasticities vector θ.
 
 # Output
-- `P_hat_Z::Matrix{Float64}`: S×NS, country-industry composite intermediate goods price index of per industry matrix P_hat_Z.
-- `P_hat_F::Matrix{Float64}`: S×N, country-industry composite final goods price index matrix P_hat_F.
-- `π_hat_Z::Matrix{Float64}`: NS×NS, origin country-industry destination country-industry intermediate goods trade share matrix π_hat_Z.
-- `π_hat_F::Matrix{Float64}`: NS×N, origin country-industry destination country final goods trade share matrix π_hat_F.
-- `cost_agg_Z::Matrix{Float64}`: S×NS, country-industry destination industry production cost matrix cost_agg_Z.
+- `P_hat_Z::Matrix{Float64}`: S×NS, country-industry composite intermediate goods price index (change) per industry matrix P_hat_Z.
+- `P_hat_F::Matrix{Float64}`: S×N, country-industry composite final goods price index (change) matrix P_hat_F.
+- `π_hat_Z::Matrix{Float64}`: NS×NS, origin country-industry destination country-industry intermediate goods trade share (change) matrix π_hat_Z.
+- `π_hat_F::Matrix{Float64}`: NS×N, origin country-industry destination country final goods trade share (change) matrix π_hat_F.
+- `cost_hat::Matrix{Float64}`: NS×1, country-industry production cost (change) vector cost_hat.
 
 # Examples
 ```julia-repl
-julia> P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_agg_Z = create_price_index_hat(w_hat, τ_hat_Z, τ_hat_F, VA_coeff, γ, π_Z, π_F, θ)
+julia> P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat = create_price_index_hat(w_hat, τ_hat_Z, τ_hat_F, VA_coeff, γ, π_Z, π_F, θ)
 ```
 """
 
@@ -80,41 +80,37 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
     # initialize
     w0_hat = w_hat # N×1, update wage vector
     P0_hat_Z = ones(S, N*S) # S×NS, intermediate goods price indices
-    P0_hat_F = ones(S, N) # S×N, final goods price indices
 
     # iteration parameters
     tolerance = 1e-3
-    max_iteration_p = 100
+    max_iteration_p = 500
     iteration_p = 0
     max_error = 1.0
 
     while max_error > tolerance && iteration_p <= max_iteration_p
 
-        # cost structure of the economy, equation (30)
-        cost_w = [w0_hat[ceil(Int,i/S)]^VA_coeff[i] for i in 1:N*S] # NS×1
-        cost_p = P0_hat_Z.^γ
-        cost_p = [prod(cost_p[:,i]) for i in 1:N*S] # NS×1 (prod is the same as sum just for multiplication)
-        global cost = cost_w .* cost_p # NS×1
+        # cost structure of the economy, equation (47)
+        cost_hat_w = [w0_hat[ceil(Int,i/S)]^VA_coeff[i] for i in 1:N*S] # NS×1, wages
+        cost_hat_p = P0_hat_Z.^γ
+        cost_hat_p = [prod(cost_hat_p[:,i]) for i in 1:N*S] # NS×1, price indices (prod is the same as sum just for multiplication)
+        global cost_hat = cost_hat_w .* cost_hat_p # NS×1
 
         # ----------
-        # price index for intermediate goods, equation (31)
-    
-        global cost_Z = [(cost[i]*τ_hat_Z[i,j])^(-θ[i]) for i in 1:N*S, j in 1:N*S] # NS×NS
+        # price index for intermediate goods from equation (48)
+        global cost_Z = [π_Z[i,j]*(cost_hat[i]*τ_hat_Z[i,j])^(-θ[i]) for i in 1:N*S, j in 1:N*S] # NS×NS
 
-        # sum over countries => price index of country-industry composite good in industry
+        # sum over origin countries => price index of country-industry composite good in industry
         global cost_agg_Z = zeros(S, N*S) # S×NS
-        π_agg_Z = zeros(S, N*S) # S×NS
+        global P_hat_Z = zeros(S, N*S) # S×NS
+        θ = reshape(θ, S, N) # S×N
         for i in 1:S
             for j in 1:N*S
                 for k in 0:S:N*S-1
                     cost_agg_Z[i, j] += cost_Z[k+i,j]
-                    π_agg_Z[i, j] += π_Z[k+i,j]
                 end
+                P_hat_Z[i, j] = cost_agg_Z[i, j]^(-1/θ[i,ceil(Int,j/S)])
             end
         end
-
-        θ = reshape(θ, S, N) # S×N
-        global P_hat_Z = [(π_agg_Z[i, j]*cost_agg_Z[i, j])^(-1/θ[i,ceil(Int,j/S)]) for i in 1:S, j in 1:N*S] # S×NS
 
         # update iteration parameters
         error = abs.(P_hat_Z .- P0_hat_Z)
@@ -122,62 +118,77 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
         P0_hat_Z = P_hat_Z # update to new price index
         iteration_p += 1 # update iteration count
 
-        println("Iteration $iteration_p completed with error $max_error") # print output to update on progress
+        println("Opt. P: Iteration $iteration_p completed with error $max_error") # print update on progress
 
     end
 
 
     # ----------
-    # price index for final goods, equation (32) --- not used in optimization, i.e. residual optimum
-
-    θ = vec(θ) # NS×1, reshape again to have row vector
-    cost_F = [(cost[i]*τ_hat_F[i,j])^(-θ[i]) for i in 1:N*S, j in 1:N] # NS×N
+    # price index for final goods from equation (49) --- not used in optimization, i.e. residual optimum (since cost is same in F as in Z!)
+    θ = vec(θ) # NS×1, reshape to have row vector
+    cost_F = [π_F[i,j]*(cost_hat[i]*τ_hat_F[i,j])^(-θ[i]) for i in 1:N*S, j in 1:N] # NS×N
 
     cost_agg_F = zeros(S, N) # S×N
-    π_agg_F = zeros(S, N) # S×N
+    P_hat_F = zeros(S, N) # S×N
+    θ = reshape(θ, S, N) # S×N
     for i in 1:S
         for j in 1:N
             for k in 0:S:N*S-1
                 cost_agg_F[i, j] += cost_F[k+i,j]
-                π_agg_F[i, j] += π_F[k+i,j]
             end
+            P_hat_F[i,j] = cost_agg_F[i, j]^(-1/θ[i,j])
         end
     end
 
-    θ = reshape(θ, S, N) # S×N
-    P_hat_F = [(π_agg_F[i, j]*cost_agg_F[i, j])^(-1/θ[i,j]) for i in 1:S, j in 1:N] # S×N
 
+    # ----------
+    # trade shares from equation (45) and (46)
+    π_hat_Z = cost_Z./repeat(cost_agg_Z, N) # NS×NS
+    π_hat_F = cost_F./repeat(cost_agg_F, N) # NS×N
 
-    # trade shares
-    π_hat_Z = cost_Z./repeat(cost_agg_Z, N) # NS×NS ----- columns are the same
-    π_hat_F = cost_F./repeat(cost_agg_F, N) # NS×N ----- columns are the same (also same as π_hat_Z - due to cost/τ being the same?)
-    # probably since cost_agg_Z also has identical columns?!
-
-    π_hat_Z = ifelse.(isinf.(π_hat_Z), 0.0, π_hat_Z) # remove infinite
+    π_hat_Z = ifelse.(isinf.(π_hat_Z), 0.0, π_hat_Z) # remove Inf
     π_hat_F = ifelse.(isinf.(π_hat_F), 0.0, π_hat_F)
 
 
-    return P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_agg_Z
+    return P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat
 end
 
 
-P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_agg_Z = create_price_index_hat(w_hat, τ_hat_Z, τ_hat_F, VA_coeff, γ, π_Z, π_F, θ)
+P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat = create_price_index_hat(w_hat, τ_hat_Z, τ_hat_F, VA_coeff, γ, π_Z, π_F, θ)
 
-# WHY?
-π_prime_Z = π_Z .* π_hat_Z
-π_prime_F = π_F .* π_hat_F
+# compute counterfactual trade shares
+π_prime_Z = π_Z .* π_hat_Z # NS×NS
+π_prime_F = π_F .* π_hat_F # NS×N
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
-# Wages
+# Wages, gross output and value added
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 w_hat_prev = w_hat # store last wage in case new optimization obtains negative wages
 
-function create_price_index_hat(w_hat::Vector, vfactor::Number, π_prime_Z::Matrix, π_prime_F::Matrix, VA_ctry::Vector, TB_ctry::Vector, γ::Matrix, α::Matrix)
+function create_wages_hat(w_hat::Vector, vfactor::Number, π_prime_Z::Matrix, π_prime_F::Matrix, VA_ctry::Vector, TB_ctry::Vector, γ::Matrix, α::Matrix)
 
+    F_ctry_prime = w_hat .* VA_ctry .- TB_ctry # N×1, counterfactual country final goods consumption
 
-    return
+    # Goods market clearing from equation (35)
+    total_sales_F = π_prime_F .* repeat(α,N) .* repeat(transpose(F_ctry_prime),N*S) # NS×N
+    total_sales_F = [sum(total_sales_F[i,:]) for i in 1:N*S] # N×1
+
+    A_prime = π_prime_Z .* repeat(γ, N) # NS×NS, intermediate input coefficient matrix
+    
+    total_sales = inv(I - A_prime) * total_sales_F #  NS×1
+    total_sales = ifelse.(total_sales .< 0.0, 0.0, total_sales) # Antras and Chor (2018)
+
+    return total_sales_F, A_prime, total_sales
 end
 
 
-a = create_price_index_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_coeff, γ, α)
+total_sales_F, A_prime, total_sales = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
+
+
+
+a = π_prime_F .* repeat(α,N) .* repeat(transpose(F_ctry_prime),N*S)
+
+[sum(a[:,j]) for j in 1:N]
+
+a = π_prime_Z .* repeat(γ, N)

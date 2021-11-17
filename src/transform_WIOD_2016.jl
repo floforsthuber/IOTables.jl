@@ -3,6 +3,8 @@
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+# --------------- Import data ---------------------------------------------------------------------------------------------------------------------------------
+
 """
     import_R(dir::String, year::Integer)
 
@@ -30,6 +32,8 @@ function import_R(dir::String, year::Integer)
     return df
 end
 
+
+# --------------- Transformations -----------------------------------------------------------------------------------------------------------------------------
 
 
 """
@@ -259,8 +263,6 @@ end
 
 
 
-
-
 """
     create_trade_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, S::Integer)
 
@@ -292,7 +294,7 @@ function create_trade_shares(Z::Matrix, F::Matrix, N::Integer, S::Integer)
     # Origin country-industry destination country final demand trade (export) shares
     F_agg = [sum(F[i,:]) for i in 1:N*S] # NS×1
     π_F = [F[i,j]/F_agg[i] for i in 1:N*S, j in 1:N] # NS×N, sum over columns = 1
-    π_F = ifelse.(isnan.(π_F), 0.0, π_F) # should never be the case (due to assumptions above)
+    π_F = ifelse.(isnan.(π_F), 0.0, π_F) # should never be needed due to assumptions in previous functions
 
     return π_Z, π_F
 end
