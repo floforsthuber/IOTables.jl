@@ -5,6 +5,7 @@
 
 # --------------- Import data ---------------------------------------------------------------------------------------------------------------------------------
 
+
 """
     import_R(dir::String, year::Integer)
 
@@ -76,6 +77,8 @@ function create_Z_VA(df::DataFrame, N::Integer, S::Integer)
 end
 
 
+# ---------------
+
 
 """
     create_F_IV(df::DataFrame, N::Integer, S::Integer)
@@ -119,6 +122,8 @@ function create_F_IV(df::DataFrame, N::Integer, S::Integer)
     return F, IV
 end
 
+
+# ---------------
 
 
 """
@@ -169,98 +174,7 @@ function inventory_adjustment(Z::Matrix, F::Matrix, IV::Matrix, N::Integer, S::I
 end
 
 
-
-"""
-    create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, S::Integer)
-
-The function computes the country value added vector VA_ctry respecting inventory adjustments, intermediate goods expenditure share matrix γ 
-    and final goods import expenditure share matrix α. Additionally, country-industry value added coeffiecient matrix VA_coeff as well as 
-    country trade balance vector TB_ctry and country final goods import vector F_ctry are produced.
-
-# Arguments
-- `Z::Matrix`: NS×NS, origin country-industry destination country-industry intermediate demand matrix Z.
-- `F::Matrix`: NS×N, origin country-industry destination country final demand matrix F.
-- `Y::Vector`: NS×1, origin country-industry gross output vector Y.
-- `N::Integer`: number of origin/destination countries.
-- `S::Integer`: number of origin/destination industries.
-
-# Output
-- `γ::Matrix{Float64}`: S×NS, country-industry intermediate input expenditure share matrix γ.
-- `α::Matrix{Float64}`: S×N, country-industry final expenditure expenditure share matrix α.
-- `VA_coeff::Vector{Float64}`: NS×1, country-industry value added coefficients vector VA_coeff.
-- `TB_ctry::Vector{Float64}`: NS×1, country trade balance (X-M) vector TB.
-- `VA_ctry::Vector{Float64}`: N×1, country value added vector VA_ctry.
-- `F_ctry::Vector{Float64}`: N×1, country final import demand vector VA_ctry.
-
-# Examples
-```julia-repl
-julia> γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, VA, N, S)
-```
-"""
-function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, S::Integer)
-
-    # reporting industry destination country-industry level input expenditure shares
-    # sum over reporting country only (eq. 37) => sum over column gives total intermediate consumption per country-industry (+ VA = Y)
-    sZ = zeros(S, N*S) # S×NS
-    for i in 1:S
-        for j in 1:N*S
-            for k in 0:S:N*S-1
-            sZ[i, j] += Z[k+i,j]
-            end
-        end
-    end
-
-    # Country-industry level input expenditure shares
-    γ = [sZ[i,j]/Y[j] for i in 1:S, j in 1:N*S] # S×NS
-    γ = ifelse.(isnan.(γ), 0.0, γ) # some entries in Y equal to zero => NaN => assume 0
-
-    # Country-industry level value added - VVi in Antras and Chor (2018)
-    # [total output - sum of inputs of own sector], i.e. computed VA => respects inventory adjustment
-    VA = [Y[j] - sum(Z[:,j]) for j in 1:N*S] # NS×1
-    VA = ifelse.(VA .< 0.0, 0.0, VA)
-    VA = ifelse.(isnan.(VA), 0.0, VA)
-
-    # Country-industry level value added coefficients
-    VA_coeff = VA ./ Y # NS×1
-    VA_coeff = ifelse.(isnan.(VA_coeff), 1.0, VA_coeff) # some entries in Y equal to zero => NaN, assume VA coefficient to be 1
-
-    # Country level value added
-    VA_ctry = [sum(VA[i:i+S-1]) for i in 1:S:N*S] # N×1
-
-    # Final import demand at country level (sum over rows not columns - would give export demand)
-    F_ctry = [sum(F[:,j]) for j in 1:N] # N×1
-
-    # Country level trade balance (exports - imports)
-    # used computation in Antras and Chor (2018) quite different
-    # need to calculate country level exports/imports (row/columns) (i.e. aggregate and remove intra-country trade)
-    E = [sum(Y[i:i+S-1]) - sum(Z[i:i+S-1,i:i+S-1]) - sum(F[i:i+S-1,ceil(Int, i/S)]) for i in 1:S:N*S] # N×1
-
-    M_Z = [sum(Z[:,j:j+S-1]) - sum(Z[j:j+S-1,j:j+S-1]) for j in 1:S:N*S]
-    M_F = [sum(F[:,ceil(Int, j/S)]) - sum(F[j:j+S-1,ceil(Int, j/S)]) for j in 1:S:N*S]
-    M = M_Z .+ M_F # N×1
-
-    TB_ctry = E .- M # N×1
-
-    # Country-industry final consumption expenditure (import) shares
-    # sum over reporting country
-    sF = zeros(S, N) # S×N
-    for i in 1:S
-        for j in 1:N
-            for k in 0:S:N*S-1
-                sF[i, j] += F[k+i,j]
-            end
-        end
-    end
-
-    # Computation as in code of Antras and Chor (2018), columns sum to 1
-    α = [sF[i,j]/F_ctry[j] for i in 1:S, j in 1:N] # S×N
-    #α2 = [sF[i,j]/(VA_ctry[j] + TB_ctry[j]) for i in 1:S, j in 1:N] # S×N, computation as in equation (38) of Antras and Chor (2018)
-    # although F_ctry .== VA_ctry .+ TB_ctry holds true for most countries,
-    # α2 considerably different (does not sum to 1) ---- WHY? (even for n=4 for which difference=0)
-
-    return γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry
-end
-
+# ---------------
 
 
 """
@@ -297,6 +211,124 @@ function create_trade_shares(Z::Matrix, F::Matrix, N::Integer, S::Integer)
     π_F = ifelse.(isnan.(π_F), 0.0, π_F) # should never be needed due to assumptions in previous functions
 
     return π_Z, π_F
+end
+
+
+# ---------------
+
+
+"""
+    create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, S::Integer)
+
+The function computes the country value added vector VA_ctry respecting inventory adjustments, intermediate goods expenditure share matrix γ 
+    and final goods import expenditure share matrix α. Additionally, country-industry value added coeffiecient matrix VA_coeff as well as 
+    country trade balance vector TB_ctry and country final goods import vector F_ctry are produced.
+
+# Arguments
+- `Z::Matrix`: NS×NS, origin country-industry destination country-industry intermediate demand matrix Z.
+- `F::Matrix`: NS×N, origin country-industry destination country final demand matrix F.
+- `Y::Vector`: NS×1, origin country-industry gross output vector Y.
+- `π_Z::Matrix`: NS×NS, origin country-industry destination country-industry intermediate goods trade share matrix π_Z.
+- `π_F::Matrix`: NS×N, origin country-industry destination country foods goods trade share matrix π_Z.
+- `N::Integer`: number of origin/destination countries.
+- `S::Integer`: number of origin/destination industries.
+
+# Output
+- `γ::Matrix{Float64}`: S×NS, country-industry intermediate input expenditure share matrix γ.
+- `α::Matrix{Float64}`: S×N, country-industry final expenditure expenditure share matrix α.
+- `VA_coeff::Vector{Float64}`: NS×1, country-industry value added coefficients vector VA_coeff.
+- `TB_ctry::Vector{Float64}`: NS×1, country trade balance (X-M) vector TB.
+- `VA_ctry::Vector{Float64}`: N×1, country value added vector VA_ctry.
+- `F_ctry::Vector{Float64}`: N×1, country final import demand vector VA_ctry.
+
+# Examples
+```julia-repl
+julia> γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, π_Z, π_F, VA, N, S)
+```
+"""
+function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, π_Z::Matrix, π_F::Matrix, N::Integer, S::Integer)
+
+    # reporting industry destination country-industry level input expenditure shares
+    # sum over reporting country only (eq. 37) => sum over column gives total intermediate consumption per country-industry (+ VA = Y)
+    sZ = zeros(S, N*S) # S×NS
+    for i in 1:S
+        for j in 1:N*S
+            for k in 0:S:N*S-1
+            sZ[i, j] += Z[k+i,j]
+            end
+        end
+    end
+
+    # Country-industry level input expenditure shares
+    γ = [sZ[i,j]/Y[j] for i in 1:S, j in 1:N*S] # S×NS
+    γ = ifelse.(isnan.(γ), 0.0, γ) # some entries in Y equal to zero => NaN => assume 0
+
+    # Country-industry level value added - VVi in Antras and Chor (2018)
+    # [total output - sum of inputs of own sector], i.e. computed VA => respects inventory adjustment
+    VA = [Y[j] - sum(Z[:,j]) for j in 1:N*S] # NS×1
+    VA = ifelse.(VA .< 0.0, 0.0, VA)
+    VA = ifelse.(isnan.(VA), 0.0, VA)
+
+    # Country-industry level value added coefficients
+    VA_coeff = VA ./ Y # NS×1
+    VA_coeff = ifelse.(isnan.(VA_coeff), 1.0, VA_coeff) # some entries in Y equal to zero => NaN, assume VA coefficient to be 1
+
+    # Country level value added
+    VA_ctry = [sum(VA[i:i+S-1]) for i in 1:S:N*S] # N×1
+
+    # Final import demand at country level (sum over rows not columns - would give export demand)
+    F_ctry = [sum(F[:,j]) for j in 1:N] # N×1
+
+    # Country-industry final consumption expenditure (import) shares
+    # sum over reporting country
+    sF = zeros(S, N) # S×N
+    for i in 1:S
+        for j in 1:N
+            for k in 0:S:N*S-1
+                sF[i, j] += F[k+i,j]
+            end
+        end
+    end
+
+    # Computation as in code of Antras and Chor (2018), columns sum to 1
+    α = [sF[i,j]/F_ctry[j] for i in 1:S, j in 1:N] # S×N
+    #α2 = [sF[i,j]/(VA_ctry[j] + TB_ctry[j]) for i in 1:S, j in 1:N] # S×N, computation as in equation (38) of Antras and Chor (2018)
+    # although F_ctry .== VA_ctry .+ TB_ctry holds true for most countries,
+    # α2 considerably different (does not sum to 1) ---- WHY? (even for n=4 for which difference=0)
+
+    # Country level trade balance (exports - imports)
+    # used computation in Antras and Chor (2018) quite different
+    # need to calculate country level exports/imports (row/columns) (i.e. aggregate and remove intra-country trade)
+    E = [sum(Y[i:i+S-1]) - sum(Z[i:i+S-1,i:i+S-1]) - sum(F[i:i+S-1,ceil(Int, i/S)]) for i in 1:S:N*S] # N×1
+
+    M_Z = [sum(Z[:,j:j+S-1]) - sum(Z[j:j+S-1,j:j+S-1]) for j in 1:S:N*S]
+    M_F = [sum(F[:,ceil(Int, j/S)]) - sum(F[j:j+S-1,ceil(Int, j/S)]) for j in 1:S:N*S]
+    M = M_Z .+ M_F # N×1
+
+    #### Antras and Chor (2018) calculation
+    E_A = zeros(N)
+    M_A = zeros(N)
+    for j in 1:N
+        for s in 1:N
+            for i in 1:N
+                iiss = (i-1)*S+s
+                jjss = (j-1)*S+s
+                for r in 1:S
+                    jjrr = (j-1)*S+r
+                    iirr = (i-1)*S+r
+                    M_A[j] += π_Z[iiss,jjrr]*γ[s,jjrr]*Y[jjrr]
+                    E_A[j] += π_Z[jjss,iirr]*γ[s,iirr]*Y[iirr]
+                end
+                M_A[j] += π_F[iiss,j]*α[s,j]*F_ctry[j]
+                E_A[j] += π_F[jjss,i]*α[s,i]*F_ctry[i]
+            end
+        end
+    end
+
+    TB_ctry = E .- M # N×1
+    TB_ctry = E_A .- M_A # N×1
+
+    return γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry
 end
 
 
@@ -338,8 +370,9 @@ function transform_WIOD_2016(dir::String, year::Integer)
     Z, VA = create_Z_VA(df, N, S)
     F, IV = create_F_IV(df, N, S)
     Z, F, Y = inventory_adjustment(Z, F, IV, N, S)
-    γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, N, S)
     π_Z, π_F = create_trade_shares(Z, F, N, S)
+    γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, π_Z, π_F, N, S)
+
 
     return Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F
 end
