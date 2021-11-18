@@ -36,9 +36,10 @@ wfmax = 1e7
 # final country level trade balance
 # should take this to be either 0 or the final value in 2011?
 TB_new = TB_ctry # N×1
+TB_ctry .= 0.0
 
 # initialize wages and price indices
-w_hat = ones(N) # N×1
+w_hat = rand(N) # N×1
 P0_hat = (ones(S,N)./α).^α # S×N
 P0_hat = transpose(P0_hat) # N×S
 
@@ -82,8 +83,8 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
     P0_hat_Z = ones(S, N*S) # S×NS, intermediate goods price indices
 
     # iteration parameters
-    tolerance_p = 1e-3
-    max_iteration_p = 500
+    tolerance_p = 1e-1
+    max_iteration_p = 50
     iteration_p = 0
     max_error_p = 1.0
 
@@ -97,18 +98,15 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
 
         # ----------
         # price index for intermediate goods from equation (48)
-        global cost_Z = [π_Z[i,j]*(cost_hat[i]*τ_hat_Z[i,j])^(-θ[i]) for i in 1:N*S, j in 1:N*S] # NS×NS
+        global cost_hat_Z = [(cost_hat[i]*τ_hat_Z[i,j])^(-θ[i]) for i in 1:N*S, j in 1:N*S] # NS×NS
+        cost_Z = [π_Z[i,j]*cost_hat_Z[i,j] for i in 1:N*S, j in 1:N*S] # NS×NS, the inside of the summation of the price index
 
         # sum over origin countries => price index of country-industry composite good in industry
-        global cost_agg_Z = zeros(S, N*S) # S×NS
         global P_hat_Z = zeros(S, N*S) # S×NS
         θ = reshape(θ, S, N) # S×N
-        for i in 1:S
-            for j in 1:N*S
-                for k in 0:S:N*S-1
-                    cost_agg_Z[i, j] += cost_Z[k+i,j]
-                end
-                P_hat_Z[i, j] = cost_agg_Z[i, j]^(-1/θ[i,ceil(Int,j/S)])
+        for j in 1:N*S
+            for i in 1:S
+                P_hat_Z[i, j] = sum(cost_Z[i:S:(N-1)*S+i, j])^(-1/θ[i,ceil(Int,j/S)])
             end
         end
 
@@ -126,25 +124,25 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
     # ----------
     # price index for final goods from equation (49) --- not used in optimization, i.e. residual optimum (since cost is same in F as in Z!)
     θ = vec(θ) # NS×1, reshape to have row vector
-    cost_F = [π_F[i,j]*(cost_hat[i]*τ_hat_F[i,j])^(-θ[i]) for i in 1:N*S, j in 1:N] # NS×N
+    cost_hat_F = [(cost_hat[i]*τ_hat_F[i,j])^(-θ[i]) for i in 1:N*S, j in 1:N] # NS×N
+    cost_F = [π_F[i,j]*cost_hat_F[i,j] for i in 1:N*S, j in 1:N] # NS×N, the inside of the summation of the price index
 
-    cost_agg_F = zeros(S, N) # S×N
     P_hat_F = zeros(S, N) # S×N
     θ = reshape(θ, S, N) # S×N
-    for i in 1:S
-        for j in 1:N
-            for k in 0:S:N*S-1
-                cost_agg_F[i, j] += cost_F[k+i,j]
-            end
-            P_hat_F[i,j] = cost_agg_F[i, j]^(-1/θ[i,j])
+    for j in 1:N
+        for i in 1:S
+            P_hat_F[i, j] = sum(cost_F[i:S:(N-1)*S+i, j])^(-1/θ[i,j])
         end
     end
 
-
     # ----------
     # trade shares from equation (45) and (46)
-    π_hat_Z = cost_Z./repeat(cost_agg_Z, N) # NS×NS
-    π_hat_F = cost_F./repeat(cost_agg_F, N) # NS×N
+    θ = vec(θ)
+    θ = repeat(θ, 1, N*S)
+    π_hat_Z = (cost_hat_Z ./ repeat(P_hat_Z, N)) .^ (.-θ) # NS×NS
+
+    θ = θ[:, 1:N] # reduce to one NS×N again
+    π_hat_F = (cost_hat_F ./ repeat(P_hat_F, N)) .^ (.-θ) # NS×N
 
     π_hat_Z = ifelse.(isinf.(π_hat_Z), 0.0, π_hat_Z) # remove Inf
     π_hat_F = ifelse.(isinf.(π_hat_F), 0.0, π_hat_F)
@@ -152,6 +150,9 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
 
     return P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat
 end
+
+
+include("price_hat.jl") # Script with functions to import and transform raw data
 
 
 P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat = create_price_index_hat(w_hat, τ_hat_Z, τ_hat_F, VA_coeff, γ, π_Z, π_F, θ)
@@ -171,17 +172,17 @@ function create_wages_hat(w_hat::Vector, vfactor::Number, π_prime_Z::Matrix, π
     F_prime_ctry = w_hat .* VA_ctry .- TB_ctry # N×1, counterfactual country final goods consumption
 
     # Goods market clearing from equation (35)
-    total_sales_F = π_prime_F .* repeat(α, N) .* repeat(transpose(F_prime_ctry), N*S) # NS×N
+    total_sales_F = π_prime_F .* repeat(α,N) .* repeat(transpose(F_prime_ctry),N*S) # NS×N
     total_sales_F = [sum(total_sales_F[i,:]) for i in 1:N*S] # N×1
 
-    A_prime = π_prime_Z .* repeat(γ, N) # NS×NS, intermediate consumption coefficient matrix
+    A_prime = π_prime_Z .* repeat(γ, N) # NS×NS, intermediate input coefficient matrix
     
     global Y_prime = inv(I - A_prime) * total_sales_F #  NS×1
     Y_prime = ifelse.(Y_prime .< 0.0, 0.0, Y_prime) # Antras and Chor (2018)
 
     # excess trade balance
     Z_prime = π_prime_Z .* repeat(γ, N) .* repeat(transpose(Y_prime), N*S) # NS×NS
-    F_prime = π_prime_F .* repeat(α, N) .* repeat(transpose(F_prime_ctry), N*S) # NS×N ---- far to big compared to Z
+    F_prime = π_prime_F .* repeat(α, N) .* repeat(transpose(F_prime_ctry), N*S) # NS×N
 
     E_prime = [sum(Y_prime[i:i+S-1]) - sum(Z_prime[i:i+S-1,i:i+S-1]) - sum(F_prime[i:i+S-1,ceil(Int, i/S)]) for i in 1:S:N*S] # N×1
 
@@ -217,11 +218,12 @@ function create_wages_hat(w_hat::Vector, vfactor::Number, π_prime_Z::Matrix, π
     δ = sign.(norm_ETB_ctry) ./ abs.(vfactor.*norm_ETB_ctry) # i.e. if norm_ETB_ctry > 0 => too much exports in model => wages should increase (sign fⁿ gives ± of surplus)
     w_hat = w_hat .* (1.0 .+ δ ./ w_hat) # N×1, increase/decrease wages for countries with an excess surplus/deficit
 
-    return w_hat
-
+    return w_hat, Y_prime
 end
 
-TB_ctry .= 0.0
 
-w_hat = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
+include("wage_hat.jl") # Script with functions to import and transform raw data
+
+
+w_hat, Y_prime = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
 

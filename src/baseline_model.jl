@@ -4,7 +4,7 @@
 
 using DataFrames, RData, LinearAlgebra, Statistics
 
-include("transform_WIOD_2016.jl") # Script with functions to import and transform raw data
+include("transform_WIOD_2016_2.jl") # Script with functions to import and transform raw data
 include("price_hat.jl") # Script with function to obtain the price index
 include("wage_hat.jl") # Script with function to obtain the wages and gross output
 
@@ -35,9 +35,8 @@ function baseline(dir::String, year::Integer, N::Integer, S::Integer)
     τ_hat_F = ones(N*S, N) # NS×N
 
     # initialize wages and price indices
-    w_hat = rand(N) # N×1
-    w_hat = fill(100, N) # N×1
-
+    w_hat = ones(N) # N×1
+    #w_hat = fill(2.0, N)
     # ------------
 
     Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_WIOD_2016(dir, year)

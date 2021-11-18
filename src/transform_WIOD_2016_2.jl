@@ -290,22 +290,13 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, π_Z::Matrix
     F_ctry = [sum(F[:,j]) for j in 1:N] # N×1
 
     # Country-industry final consumption expenditure (import) shares
-    # sum over reporting country
-    sF = zeros(S, N) # S×N
-    for i in 1:S
-        for j in 1:N
-            for k in 0:S:N*S-1
-                sF[i, j] += F[k+i,j]
-            end
+    # columns sum to 1
+    α = zeros(S, N)
+    for j in 1:N
+        for i in 1:S
+            α[i, j] = sum(F[i:S:(N-1)*S+i, j]) / F_ctry[j]
         end
     end
-
-    # Computation as in code of Antras and Chor (2018), columns sum to 1
-    α = [sF[i,j]/F_ctry[j] for i in 1:S, j in 1:N] # S×N
-    #α = [sum(F[j:S:(i-1)*S+j,i])/F_ctry[i] for i in 1:N, j in 1:S] # S×N, Antras and Chor (2018)
-    #α2 = [sF[i,j]/(VA_ctry[j] + TB_ctry[j]) for i in 1:S, j in 1:N] # S×N, computation as in equation (38) of Antras and Chor (2018)
-    # although F_ctry .== VA_ctry .+ TB_ctry holds true for most countries,
-    # α2 considerably different (does not sum to 1) ---- WHY? (even for n=4 for which difference=0)
 
     # Country level trade balance (exports - imports)
     # used computation in Antras and Chor (2018) quite different
@@ -337,7 +328,9 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, π_Z::Matrix
     end
 
     TB_ctry = E .- M # N×1
-    TB_ctry = E_A .- M_A # N×1
+    #TB_ctry = E_A .- M_A # N×1
+
+    #TB_ctry == VA_ctry .- F_ctry # must hold, holds much better with own calculation?
 
     return γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry
 end

@@ -53,18 +53,15 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
 
         # ----------
         # price index for intermediate goods from equation (48)
-        global cost_Z = [π_Z[i,j]*(cost_hat[i]*τ_hat_Z[i,j])^(-θ[i]) for i in 1:N*S, j in 1:N*S] # NS×NS
+        global cost_hat_Z = [(cost_hat[i]*τ_hat_Z[i,j])^(-θ[i]) for i in 1:N*S, j in 1:N*S] # NS×NS
+        cost_Z = [π_Z[i,j]*cost_hat_Z[i,j] for i in 1:N*S, j in 1:N*S] # NS×NS, the inside of the summation of the price index
 
         # sum over origin countries => price index of country-industry composite good in industry
-        global cost_agg_Z = zeros(S, N*S) # S×NS
         global P_hat_Z = zeros(S, N*S) # S×NS
         θ = reshape(θ, S, N) # S×N
-        for i in 1:S
-            for j in 1:N*S
-                for k in 0:S:N*S-1
-                    cost_agg_Z[i, j] += cost_Z[k+i,j]
-                end
-                P_hat_Z[i, j] = cost_agg_Z[i, j]^(-1/θ[i,ceil(Int,j/S)])
+        for j in 1:N*S
+            for i in 1:S
+                P_hat_Z[i, j] = sum(cost_Z[i:S:(N-1)*S+i, j])^(-1/θ[i,ceil(Int,j/S)])
             end
         end
 
@@ -82,25 +79,25 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
     # ----------
     # price index for final goods from equation (49) --- not used in optimization, i.e. residual optimum (since cost is same in F as in Z!)
     θ = vec(θ) # NS×1, reshape to have row vector
-    cost_F = [π_F[i,j]*(cost_hat[i]*τ_hat_F[i,j])^(-θ[i]) for i in 1:N*S, j in 1:N] # NS×N
+    cost_hat_F = [(cost_hat[i]*τ_hat_F[i,j])^(-θ[i]) for i in 1:N*S, j in 1:N] # NS×N
+    cost_F = [π_F[i,j]*cost_hat_F[i,j] for i in 1:N*S, j in 1:N] # NS×N, the inside of the summation of the price index
 
-    cost_agg_F = zeros(S, N) # S×N
     P_hat_F = zeros(S, N) # S×N
     θ = reshape(θ, S, N) # S×N
-    for i in 1:S
-        for j in 1:N
-            for k in 0:S:N*S-1
-                cost_agg_F[i, j] += cost_F[k+i,j]
-            end
-            P_hat_F[i,j] = cost_agg_F[i, j]^(-1/θ[i,j])
+    for j in 1:N
+        for i in 1:S
+            P_hat_F[i, j] = sum(cost_F[i:S:(N-1)*S+i, j])^(-1/θ[i,j])
         end
     end
 
-
     # ----------
     # trade shares from equation (45) and (46)
-    π_hat_Z = cost_Z./repeat(cost_agg_Z, N) # NS×NS
-    π_hat_F = cost_F./repeat(cost_agg_F, N) # NS×N
+    θ = vec(θ)
+    θ = repeat(θ, 1, N*S)
+    π_hat_Z = (cost_hat_Z ./ repeat(P_hat_Z, N)) .^ (.-θ) # NS×NS
+
+    θ = θ[:, 1:N] # reduce to one NS×N again
+    π_hat_F = (cost_hat_F ./ repeat(P_hat_F, N)) .^ (.-θ) # NS×N
 
     π_hat_Z = ifelse.(isinf.(π_hat_Z), 0.0, π_hat_Z) # remove Inf
     π_hat_F = ifelse.(isinf.(π_hat_F), 0.0, π_hat_F)
