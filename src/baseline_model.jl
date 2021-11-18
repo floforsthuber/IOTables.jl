@@ -42,6 +42,7 @@ function baseline(dir::String, year::Integer, N::Integer, S::Integer)
 
     Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_WIOD_2016(dir, year)
 
+    TB_ctry .= 0.0
     # ------------
 
     while max_error > tolerance && iteration <= max_iteration

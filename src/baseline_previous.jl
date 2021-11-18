@@ -4,7 +4,7 @@
 
 using DataFrames, RData, LinearAlgebra, Statistics
 
-include("transform_WIOD_2016.jl") # Script with functions to import and transform raw data
+include("transform_WIOD_2016_2.jl") # Script with functions to import and transform raw data
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -220,6 +220,8 @@ function create_wages_hat(w_hat::Vector, vfactor::Number, π_prime_Z::Matrix, π
     return w_hat
 
 end
+
+TB_ctry .= 0.0
 
 w_hat = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
 
