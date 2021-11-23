@@ -4,7 +4,7 @@
 
 using DataFrames, RData, LinearAlgebra, Statistics
 
-include("transform_WIOD_2016_2.jl") # Script with functions to import and transform raw data
+include("transform_WIOD_2016_3.jl") # Script with functions to import and transform raw data
 include("price_hat.jl") # Script with function to obtain the price index
 include("wage_hat.jl") # Script with function to obtain the wages and gross output
 
@@ -39,9 +39,10 @@ function baseline(dir::String, year::Integer, N::Integer, S::Integer)
     #w_hat = fill(2.0, N)
     # ------------
 
-    Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_WIOD_2016(dir, year)
+    Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_WIOD_2016(dir, year, N, S)
 
-    TB_ctry .= 0.0
+    #TB_ctry .= 0.0
+
     # ------------
 
     while max_error > tolerance && iteration <= max_iteration
@@ -53,7 +54,7 @@ function baseline(dir::String, year::Integer, N::Integer, S::Integer)
         global π_prime_F = π_F .* π_hat_F # NS×N
 
         # store last wage in case new optimization obtains negative wages
-        w_hat_prev = w_hat 
+        w_hat_prev = copy(w_hat)
 
         w_hat, Y_prime = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
 
@@ -63,7 +64,7 @@ function baseline(dir::String, year::Integer, N::Integer, S::Integer)
         iteration += 1 # update iteration count
 
         if minimum(w_hat) < 0.0
-            w_hat = w_hat_prev
+            w_hat = copy(w_hat_prev)
             println("Iteration $iteration completed with error $max_error (wage negative, rerun with previous estimate)")
         else
             println("Iteration $iteration completed with error $max_error")

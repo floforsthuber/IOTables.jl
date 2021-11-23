@@ -74,10 +74,10 @@ function create_matrices(df::DataFrame, N::Integer, S::Integer)
     F = F[:, Not(inventory_columns)] # NS×4*N
     
     IV = Matrix(convert.(Float64, IV)) # NS×N
+    F = Matrix(convert.(Float64, F)) # NS×4*N
+
     IV = [sum(IV[i,:]) for i in 1:N*S] # NS×1
 
-    F = Matrix(convert.(Float64, F)) # NS×4*N
-    
     # Compute gross output from intermediate and final demand
     Y = [sum(Z[i,:]) + sum(F[i,:]) + IV[i] for i in 1:N*S] # NS×1
     Y = ifelse.(abs.(Y) .< 1e-6, 0.0, Y)
@@ -176,20 +176,11 @@ julia> γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z,
 """
 function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, π_Z::Matrix, π_F::Matrix, N::Integer, S::Integer)
 
-    # reporting industry destination country-industry level input expenditure shares
-    # sum over reporting country only (eq. 37) => sum over column gives total intermediate consumption per country-industry (+ VA = Y)
-    sZ = zeros(S, N*S) # S×NS
-    for i in 1:S
-        for j in 1:N*S
-            for k in 0:S:N*S-1
-            sZ[i, j] += Z[k+i,j]
-            end
-        end
-    end
-
     # Country-industry level input expenditure shares
-    sZ_VA = [sZ; VA']
-    γ_VA = [sZ_VA[i,j]/sum(sZ_VA[:,j]) for i in 1:S+1, j in 1:N*S]
+    # sum over reporting country only (eq. 37) => sum over column gives total intermediate consumption per country-industry (+ VA = Y)
+    Z_agg = [sum(Z[i:S:(N-1)*S+i, j]) for i in 1:S, j in 1:N*S]
+    Z_agg_VA = [Z_agg; VA']
+    γ_VA = [Z_agg_VA[i,j]/sum(Z_agg_VA[:,j]) for i in 1:S+1, j in 1:N*S]
     γ = γ_VA[1:S, 1:N*S] # S×NS
     γ = ifelse.(isnan.(γ), 0.0, γ) # some entries in potentially equal to zero => NaN => assume 0
 
@@ -203,14 +194,8 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, 
     # Final import demand at country level (sum over rows not columns - would give export demand)
     F_ctry = [sum(F[:,j]) for j in 1:N] # N×1
 
-    # Country-industry final consumption expenditure (import) shares
-    # columns sum to 1
-    α = zeros(S, N)
-    for j in 1:N
-        for i in 1:S
-            α[i, j] = sum(F[i:S:(N-1)*S+i, j]) / F_ctry[j]
-        end
-    end
+    # Country-industry final consumption expenditure (import) shares => columns sum to 1
+    α = [sum(F[i:S:(N-1)*S+i, j])/F_ctry[j] for i in 1:S, j in 1:N] # S×N
 
     # Country level trade balance (exports - imports)
     # used computation in Antras and Chor (2018) quite different

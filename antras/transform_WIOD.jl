@@ -50,7 +50,7 @@ function antras_trans1(df::DataFrame, N::Integer, S::Integer)
     FFi = FF .* (repeat(YY,1,N*4) ./ repeat(adj,1,N*4)) # NS×N*4, inventory adjustment
     FFi = ifelse.(isnan.(FFi), 0.0, FFi)
     FFi = ifelse.(isinf.(FFi), 0.0, FFi)
-    FFdi = [sum(FF[i,j:j+3]) for i in 1:N*S, j in 1:4:N*4] # NS×N
+    FFdi = [sum(FFi[i,j:j+3]) for i in 1:N*S, j in 1:4:N*4] # NS×N
 
     YYi = [sum(XXi[i,:]) + sum(FFdi[i,:]) for i in 1:N*S] # NS×1
 
@@ -91,6 +91,9 @@ function antras_trans2(XXi::Matrix, FFdi::Matrix, YYi::Vector, VVi::Vector)
             alphas[i, j] = sum(FFdi[i:S:(N-1)*S+i, j]) / CtyCons[j]
         end
     end
+
+
+
 
     VAn = [sum(VVi[i:i+S-1]) for i in 1:S:N*S] # N×1
 
@@ -140,6 +143,14 @@ Z, F, Y, VA = create_matrices(df, N, S)
 γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, VA, π_Z, π_F, N, S)
 #####################
 
-count(round.(gammas,digits=2) .!= round.(γ,digits=2))
+alphas == α
+gammas == γ
+PiF == π_F
+Pi == π_Z
+F == FFdi
+F_ctry == CtyCons
 
-count(round.(alphas,digits=1) .!= round.(α,digits=1))
+VA_ctry.- F_ctry
+Surplusn
+TB_ctry
+Surplusn .- TB_ctry
