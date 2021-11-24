@@ -130,11 +130,10 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
     θ = θ[:, 1:N] # reduce to one NS×N again
     π_hat_F = (cost_hat_F ./ repeat(P_hat_F, N)) .^ (.-θ) # NS×N
 
-    return P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat, cost_hat_Z
+    return P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat
 end
 
-
-P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat, cost_hat_Z = create_price_index_hat(w_hat, τ_hat_Z, τ_hat_F, VA_coeff, γ, π_Z, π_F, θ)
+P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat = create_price_index_hat(w_hat, τ_hat_Z, τ_hat_F, VA_coeff, γ, π_Z, π_F, θ)
 
 # compute counterfactual trade shares
 #π_hat_Z = ifelse.(isinf.(π_hat_Z), 0.0, π_hat_Z) # remove Inf
@@ -163,7 +162,7 @@ function create_wages_hat(w_hat::Vector, vfactor::Number, π_prime_Z::Matrix, π
     global Y_prime = inv(I - A_prime) * total_sales_F #  NS×1
     Y_prime = ifelse.(Y_prime .< 0.0, 0.0, Y_prime) # Antras and Chor (2018)
 
-    # # excess trade balance
+    # excess trade balance
     # Z_prime = π_prime_Z .* repeat(γ, N) .* repeat(transpose(Y_prime), N*S) # NS×NS
     # F_prime = π_prime_F .* repeat(α, N) .* repeat(transpose(F_prime_ctry), N*S) # NS×N
 
@@ -206,7 +205,7 @@ function create_wages_hat(w_hat::Vector, vfactor::Number, π_prime_Z::Matrix, π
     # Problem: After first wage adjustment rounds the counterfactual output explodes (Y_prime)
     # which causes the trade balance to be huge and VA_ctry is not enough to force: norm_ETB_ctry ∈ [0,1]
     # hence wages increase by crazy amount
-    # Solution: normalize by using Y_prime_ctry instead of VA_ctry, could also recalculate VA_prime_ctry?
+    # Solution: normalize by using Y_prime_ctry adjusted by trade balance instead of VA_ctry, could also recalculate VA_prime_ctry?
 
     # Problem: at some point the scaling of the adjustment δ ./ w_hat > 1 if w_hat is small enough
     # hence w_hat becomes negative and we run in an infinitive loop
@@ -214,61 +213,39 @@ function create_wages_hat(w_hat::Vector, vfactor::Number, π_prime_Z::Matrix, π
 
     # adjust wages to excess trade balance
     Y_prime_ctry = [sum(Y_prime[i:i+S-1]) for i in 1:S:N*S] # N×1
-    norm_ETB_ctry =  ETB_ctry ./ Y_prime_ctry # N×1, normalized excess trade balance
+    norm_ETB_ctry =  ETB_ctry ./ (Y_prime_ctry .- ETB_ctry) # N×1, normalized excess trade balance
     δ = sign.(norm_ETB_ctry) .* abs.(vfactor.*norm_ETB_ctry) # i.e. if norm_ETB_ctry > 0 => too much exports in model => wages should increase (sign fⁿ gives ± of surplus)
     w_hat = w_hat .* (1.0 .+ δ) # N×1, increase/decrease wages for countries with an excess surplus/deficit
 
     return w_hat, Y_prime
 end
 
-w_hat, Y_prime = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
-
-
-# second time 
-P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat = create_price_index_hat(w_hat, τ_hat_Z, τ_hat_F, VA_coeff, γ, π_Z, π_F, θ)
-
-π_prime_Z = π_Z .* π_hat_Z # NS×NS
-π_prime_F = π_F .* π_hat_F # NS×N
-w_hat_prev = copy(w_hat)
 
 w_hat, Y_prime = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
+
 
 # third time 
+times = 30
 
-P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat = create_price_index_hat(w_hat, τ_hat_Z, τ_hat_F, VA_coeff, γ, π_Z, π_F, θ)
+for i in 2:times
 
-π_prime_Z = π_Z .* π_hat_Z # NS×NS
-π_prime_F = π_F .* π_hat_F # NS×N
-w_hat_prev = copy(w_hat)
+    P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat = create_price_index_hat(w_hat, τ_hat_Z, τ_hat_F, VA_coeff, γ, π_Z, π_F, θ)
 
-w_hat, Y_prime = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
-print(findall(w_hat.<0))
+    π_prime_Z = π_Z .* π_hat_Z # NS×NS
+    π_prime_F = π_F .* π_hat_F # NS×N
+    w_hat_prev = copy(w_hat)
+    
+    w_hat, Y_prime = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
+    println(findall(w_hat.<0))
+    println("iteration $i")
 
-# fourth time 
+end
 
-P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat = create_price_index_hat(w_hat, τ_hat_Z, τ_hat_F, VA_coeff, γ, π_Z, π_F, θ)
-
-π_prime_Z = π_Z .* π_hat_Z # NS×NS
-π_prime_F = π_F .* π_hat_F # NS×N
-w_hat_prev = copy(w_hat)
-
-w_hat, Y_prime = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
-print(findall(w_hat.<0))
-
-# fith time 
-
-P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat = create_price_index_hat(w_hat, τ_hat_Z, τ_hat_F, VA_coeff, γ, π_Z, π_F, θ)
-
-π_prime_Z = π_Z .* π_hat_Z # NS×NS
-π_prime_F = π_F .* π_hat_F # NS×N
-w_hat_prev = copy(w_hat)
-
-w_hat, Y_prime = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
-print(findall(w_hat.<0))
+w_hat2 = copy(w_hat)
 
 ### -------------
 
-F_prime_ctry = w_hat_prev .* VA_ctry .- TB_ctry # N×1, counterfactual country final goods consumption
+F_prime_ctry = w_hat2 .* VA_ctry .- TB_ctry # N×1, counterfactual country final goods consumption
 
 # Goods market clearing from equation (35)
 total_sales_F = π_prime_F .* repeat(α,N) .* repeat(transpose(F_prime_ctry),N*S) # NS×N
@@ -303,7 +280,7 @@ ETB_ctry = RHS .- LHS .- TB_ctry # N×1, excess trade balance
 Y_prime_ctry = [sum(Y_prime[i:i+S-1]) for i in 1:S:N*S] # N×1
 norm_ETB_ctry =  ETB_ctry ./ (Y_prime_ctry .- ETB_ctry) # N×1, normalized excess trade balance
 δ = sign.(norm_ETB_ctry) .* abs.(vfactor.*norm_ETB_ctry) # i.e. if norm_ETB_ctry > 0 => too much exports in model => wages should increase (sign fⁿ gives ± of surplus)
-w_hat = w_hat .* (1.0 .+ δ) # N×1, increase/decrease wages for countries with an excess surplus/deficit
+w_hat3 = w_hat2 .* (1.0 .+ δ) # N×1, increase/decrease wages for countries with an excess surplus/deficit
 
 ETB_ctry[9]
 Y_prime_ctry[9]

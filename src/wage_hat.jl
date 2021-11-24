@@ -71,6 +71,5 @@ function create_wages_hat(w_hat::Vector, vfactor::Number, π_prime_Z::Matrix, π
     δ = sign.(norm_ETB_ctry) .* abs.(vfactor.*norm_ETB_ctry) # i.e. if norm_ETB_ctry > 0 => too much exports in model => wages should increase (sign fⁿ gives ± of surplus)
     w_hat = w_hat .* (1.0 .+ δ) # N×1, increase/decrease wages for countries with an excess surplus/deficit
 
-
     return w_hat, Y_prime
 end

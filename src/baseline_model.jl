@@ -22,7 +22,7 @@ function baseline(dir::String, year::Integer, N::Integer, S::Integer)
     # iteration parameters
     vfactor = 0.4
     tolerance = 1e-3
-    max_iteration = 50
+    max_iteration = 100
     iteration = 0
     max_error = 1e7
 
