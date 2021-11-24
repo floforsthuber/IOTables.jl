@@ -34,7 +34,7 @@ julia> P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat = create_price_index_hat(w
 function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matrix, VA_coeff::Vector, γ::Matrix, π_Z::Matrix, π_F::Matrix, θ::Vector)
 
     # initialize
-    w0_hat = copy(w_hat) # N×1, update wage vector
+    w0_hat = w_hat # N×1, update wage vector
     P0_hat_Z = ones(S, N*S) # S×NS, intermediate goods price indices
 
     # iteration parameters
@@ -78,7 +78,7 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
         # update iteration parameters
         error = abs.(P_hat_Z .- P0_hat_Z)
         max_error_p = maximum(error) # update error
-        P0_hat_Z = copy(P_hat_Z) # update to new price index
+        P0_hat_Z = P_hat_Z # update to new price index
         iteration_p += 1 # update iteration count
 
         println("Opt. P: Iteration $iteration_p completed with error $max_error_p") # print update on progress
@@ -112,10 +112,6 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
 
     θ = θ[:, 1:N] # reduce to one NS×N again
     π_hat_F = (cost_hat_F ./ repeat(P_hat_F, N)) .^ (.-θ) # NS×N
-
-    π_hat_Z = ifelse.(isinf.(π_hat_Z), 0.0, π_hat_Z) # remove Inf
-    π_hat_F = ifelse.(isinf.(π_hat_F), 0.0, π_hat_F)
-
 
     return P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat
 end

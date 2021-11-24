@@ -76,11 +76,15 @@ function create_matrices(df::DataFrame, N::Integer, S::Integer)
     IV = Matrix(convert.(Float64, IV)) # NS×N
     F = Matrix(convert.(Float64, F)) # NS×4*N
 
+    # remove zero and negative entries
+    Z = ifelse.(Z .<= 0.0, 1e-18, Z) # needed for model simulation, otherwise NaN
+    F = ifelse.(F .<= 0.0, 1e-18, F)
+
     IV = [sum(IV[i,:]) for i in 1:N*S] # NS×1
 
     # Compute gross output from intermediate and final demand
     Y = [sum(Z[i,:]) + sum(F[i,:]) + IV[i] for i in 1:N*S] # NS×1
-    Y = ifelse.(abs.(Y) .< 1e-6, 0.0, Y)
+    Y = ifelse.(abs.(Y) .< 1e-18, 0.0, Y)
    
     # Inventory adjustment (spread IV regardless of origin over all columns)
     adj = Y .- IV # NS×1
@@ -206,6 +210,8 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, 
     M_F = [sum(F[:,ceil(Int, j/S)]) - sum(F[j:j+S-1,ceil(Int, j/S)]) for j in 1:S:N*S]
     M = M_Z .+ M_F # N×1
 
+    TB_ctry = E .- M # N×1
+
     # #### Antras and Chor (2018) calculation
     # E_A = zeros(N)
     # M_A = zeros(N)
@@ -226,7 +232,6 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, 
     #     end
     # end
 
-    TB_ctry = E .- M # N×1
     #TB_ctry = E_A .- M_A # N×1
 
     #TB_ctry == VA_ctry .- F_ctry # must hold, holds much better with own calculation?
