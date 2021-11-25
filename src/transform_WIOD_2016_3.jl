@@ -9,57 +9,32 @@
 """
     import_R(dir::String, year::Integer)
 
-The function loads the WIOD Input-Output Table of specified year as DataFrame into the environment.
+The function loads the WIOD Input-Output Table of specified year as DataFrame into the environment and 
+    extracts the raw intermediate, final demand matrices (Z, F) and the inventory adjustment matrix IV.
 
 # Arguments
 - `dir::String`: directory of raw data.
 - `year::Integer`: specifies the year of the WIOD table which should be imported.
+- `N::Integer`: number of origin/destination countries.
+- `S::Integer`: number of origin/destination industries.
 
 # Output
-- `df::DataFrame{Float64}`: WIOT table as DataFrame in wide format.
+- `Z::Matrix`: NS×NS, raw origin country-industry destination country-industry intermediate demand matrix Z.
+- `F::Matrix`: NS×N, raw origin country-industry destination country final demand matrix F.
+- `IV::Matrix`: NS×N, raw origin country-industry destination country inventory adjustment matrix IV.
 
 # Examples
 ```julia-repl
-julia> WIOD_2012 = import_R(dir, 2012)
+julia> Z, F, IV = import_R(dir, 2012)
 ```
 """
-function import_R(dir::String, year::Integer)
+
+function import_R(dir::String, year::Integer, N::Integer, S::Integer)
 
     # load data for specified year and transform into a DataFrame (automatically)
     path = dir * "WIOT" * string(year) * "_October16_ROW.RData"
     df = RData.load(path)["wiot"] # 2472×2690 DataFrame
     transform!(df, [:Year, :RNr] .=> ByRow(Int64) .=> [:Year, :RNr], renamecols=false) # Years, row-industry-identifier as type: Int64
-
-    return df
-end
-
-
-# --------------- Transformations -----------------------------------------------------------------------------------------------------------------------------
-
-
-"""
-    create_matrices(df::DataFrame, N::Integer, S::Integer)
-
-The function creates the origin country-industry destination country-industry intermediate demand matrix Z and 
-    the country-industry VA vector.
-
-# Arguments
-- `df::DataFrame`: specifies the DataFrame used for creating Z.
-- `N::Integer`: number of origin/destination countries.
-- `S::Integer`: number of origin/destination industries.
-
-# Output
-- `Z::Matrix{Float64}`: NS×NS, origin country-industry destination country-industry intermediate demand matrix Z.
-- `F::Matrix{Float64}`: NS×N, origin country-industry destination country final demand matrix F.
-- `Y::Vector{Float64}`: NS×1, inventory adjusted country-industry gross output vector Y.
-- `VA::Vector{Float64}`: NS×1, country-industry value added vector VA.
-
-# Examples
-```julia-repl
-julia> Z, F, Y, VA = create_matrices(WIOD_2012, N, S)
-```
-"""
-function create_matrices(df::DataFrame, N::Integer, S::Integer)
 
     # Intermediate demand
     Z = df[1:N*S, 6:N*S+5] # NS×NS
@@ -76,7 +51,90 @@ function create_matrices(df::DataFrame, N::Integer, S::Integer)
     IV = Matrix(convert.(Float64, IV)) # NS×N
     F = Matrix(convert.(Float64, F)) # NS×4*N
 
-    # remove zero and negative entries
+    return Z, F, IV
+end
+
+
+"""
+    import_excel(dir::String, year::Integer)
+
+The function loads the WIOD Input-Output Table of specified year as DataFrame into the environment and 
+    extracts the raw intermediate, final demand matrices (Z, F) and the inventory adjustment matrix IV.
+
+# Arguments
+- `dir::String`: directory of raw data.
+- `year::Integer`: specifies the year of the WIOD table which should be imported.
+- `N::Integer`: number of origin/destination countries.
+- `S::Integer`: number of origin/destination industries.
+
+# Output
+- `Z::Matrix`: NS×NS, raw origin country-industry destination country-industry intermediate demand matrix Z.
+- `F::Matrix`: NS×N, raw origin country-industry destination country final demand matrix F.
+- `IV::Matrix`: NS×N, raw origin country-industry destination country inventory adjustment matrix IV.
+
+# Examples
+```julia-repl
+julia> Z, F, IV = import_excel(dir, 2012)
+```
+"""
+
+function import_excel(dir::String, year::Integer, N::Integer, S::Integer)
+
+    # load data for specified year and transform into a DataFrame (automatically)
+    path = dir * "WIOT95_ROW_Apr12.xlsx"
+    df = DataFrame(XLSX.readxlsx(path)["WIOT_$year"][:], :auto)
+    df = df[7:end,5:end]
+
+    # Intermediate demand
+    Z = df[1:N*S, 1:N*S] # NS×NS
+    Z = Matrix(convert.(Float64, Z))
+
+    # Final demand
+    F = df[1:N*S, N*S+1:end-1] # NS×5*N
+    
+    # Subset final demand for inventory adjustments
+    inventory_columns = 5:5:5*N
+    IV = F[:, inventory_columns] # NS×N
+    F = F[:, Not(inventory_columns)] # NS×4*N
+    
+    IV = Matrix(convert.(Float64, IV)) # NS×N
+    F = Matrix(convert.(Float64, F)) # NS×4*N
+
+
+    return Z, F, IV
+end
+
+
+# --------------- Transformations -----------------------------------------------------------------------------------------------------------------------------
+
+
+"""
+    create_matrices(df::DataFrame, N::Integer, S::Integer)
+
+The function creates the origin country-industry destination country-industry intermediate demand matrix Z and 
+    the country-industry VA vector.
+
+# Arguments
+- `Z::Matrix`: NS×NS, raw origin country-industry destination country-industry intermediate demand matrix Z.
+- `F::Matrix`: NS×N, raw origin country-industry destination country final demand matrix F.
+- `IV::Matrix`: NS×N, raw origin country-industry destination country inventory adjustment matrix IV.
+- `N::Integer`: number of origin/destination countries.
+- `S::Integer`: number of origin/destination industries.
+
+# Output
+- `Z::Matrix{Float64}`: NS×NS, origin country-industry destination country-industry intermediate demand matrix Z.
+- `F::Matrix{Float64}`: NS×N, origin country-industry destination country final demand matrix F.
+- `Y::Vector{Float64}`: NS×1, inventory adjusted country-industry gross output vector Y.
+- `VA::Vector{Float64}`: NS×1, country-industry value added vector VA.
+
+# Examples
+```julia-repl
+julia> Z, F, Y, VA = create_matrices(WIOD_2012, N, S)
+```
+"""
+function create_matrices(Z::Matrix, F::Matrix, IV::Matrix, N::Integer, S::Integer)
+
+    # remove zero and negative entries (page 37 Antras and Chor, 2018)
     Z = ifelse.(Z .<= 0.0, 1e-18, Z) # needed for model simulation, otherwise NaN
     F = ifelse.(F .<= 0.0, 1e-18, F)
 
@@ -274,8 +332,8 @@ julia> Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transfo
 """
 function transform_WIOD_2016(dir::String, year::Integer, N::Integer, S::Integer)
 
-    df = import_R(dir, year)
-    Z, F, Y, VA = create_matrices(df, N, S)
+    Z, F, IV = import_R(dir, year, N, S)
+    Z, F, Y, VA = create_matrices(Z, F, IV, N, S)
     π_Z, π_F = create_trade_shares(Z, F, N, S)
     γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, VA, π_Z, π_F, N, S)
 

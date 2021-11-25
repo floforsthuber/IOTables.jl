@@ -59,7 +59,7 @@ function baseline(dir::String, year::Integer, N::Integer, S::Integer)
         # store last wage in case new optimization obtains negative wages
         w_hat_prev = copy(w_hat)
 
-        w_hat, Y_prime = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
+        w_hat, Y_prime, ETB_ctry = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, Y, γ, α)
 
         # update iteration parameters
         error = abs.(w_hat .- w_hat_prev)
@@ -79,9 +79,9 @@ function baseline(dir::String, year::Integer, N::Integer, S::Integer)
 
     # ------------
 
-    return w_hat, Y_prime, π_prime_Z, π_prime_F, α, γ
+    return w_hat, Y_prime, ETB_ctry, π_prime_Z, π_prime_F, α, γ
 
 end
 
 
-w_hat, Y_prime, π_prime_Z, π_prime_F, α, γ = baseline(dir, 2014, N, S)
+w_hat, Y_prime, ETB_ctry, π_prime_Z, π_prime_F, α, γ = baseline(dir, 2014, N, S)
