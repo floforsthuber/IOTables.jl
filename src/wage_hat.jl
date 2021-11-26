@@ -2,8 +2,35 @@
 # Function to obtain the wages and gross output
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+"""
+    create_wages_hat(w_hat::Vector, vfactor::Number, π_prime_Z::Matrix, π_prime_F::Matrix, VA_ctry::Vector, TB_ctry::Vector, γ::Matrix, α::Matrix)
 
-function create_wages_hat(w_hat::Vector, vfactor::Number, π_prime_Z::Matrix, π_prime_F::Matrix, VA_ctry::Vector, TB_ctry::Vector, Y::Vector, γ::Matrix, α::Matrix)
+The function computes the optimal country wage (change) conditional on the economys cost structure by minimizing the distance between successive iterations.
+
+# Arguments
+- `w_hat::Vector`: N×1, country wage (change) vector w_hat.
+- `vfactor::Number`: scalar ∈ (0,1), scales wage adjustment, the higher the higher the adjustment.
+- `π_prime_Z::Matrix`: NS×NS, counterfactual origin country-industry destination country-industry intermediate goods trade share matrix π_Z.
+- `π_prime_F::Matrix`: NS×N, counterfactual origin country-industry destination country final goods trade share matrix π_F.
+- `VA_ctry::Vector`: N×1, country value added vector VA_ctry.
+- `TB_ctry::Vector`: NS×1, country trade balance (X-M) vector TB.
+- `γ::Matrix`: S×NS, country-industry intermediate input expenditure share matrix γ.
+- `α::Matrix`: S×N, country-industry final expenditure expenditure share matrix α.
+
+# Output
+- `P_hat_Z::Matrix{Float64}`: S×NS, country-industry composite intermediate goods price index (change) per industry matrix P_hat_Z.
+- `P_hat_F::Matrix{Float64}`: S×N, country-industry composite final goods price index (change) matrix P_hat_F.
+- `π_hat_Z::Matrix{Float64}`: NS×NS, origin country-industry destination country-industry intermediate goods trade share (change) matrix π_hat_Z.
+- `π_hat_F::Matrix{Float64}`: NS×N, origin country-industry destination country final goods trade share (change) matrix π_hat_F.
+- `cost_hat::Matrix{Float64}`: NS×1, country-industry production cost (change) vector cost_hat.
+
+# Examples
+```julia-repl
+julia> w_hat, Y_prime, ETB_ctry = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
+```
+"""
+
+function create_wages_hat(w_hat::Vector, vfactor::Number, π_prime_Z::Matrix, π_prime_F::Matrix, VA_ctry::Vector, TB_ctry::Vector, γ::Matrix, α::Matrix)
 
     F_prime_ctry = w_hat .* VA_ctry .- TB_ctry # N×1, counterfactual country final goods consumption
 
@@ -28,48 +55,10 @@ function create_wages_hat(w_hat::Vector, vfactor::Number, π_prime_Z::Matrix, π
 
     global ETB_ctry = E_prime .- M_prime .- TB_ctry # N×1
 
-    # #### Antras and Chor (2018) calculation
-    # LHS = zeros(N)
-    # RHS = zeros(N)
-    # for j in 1:N
-    #     for s in 1:S
-    #         for i in 1:N
-    #             iiss = (i-1)*S+s
-    #             jjss = (j-1)*S+s
-    #             for r in 1:S
-    #                 jjrr = (j-1)*S+r
-    #                 iirr = (i-1)*S+r
-    #                 LHS[j] += π_prime_Z[iiss,jjrr]*γ[s,jjrr]*Y_prime[jjrr]
-    #                 RHS[j] += π_prime_Z[jjss,iirr]*γ[s,iirr]*Y_prime[iirr]
-    #             end
-    #             LHS[j] += π_prime_F[iiss,j]*α[s,j]*F_prime_ctry[j]
-    #             RHS[j] += π_prime_F[jjss,i]*α[s,i]*F_prime_ctry[i]
-    #         end
-    #     end
-    # end
-
-    # global ETB_ctry = RHS .- LHS .- TB_ctry # N×1, excess trade balance
-
     # adjust wages to excess trade balance
-    # norm_ETB_ctry =  ETB_ctry ./ VA_ctry # N×1, normalized excess trade balance
-    # δ = sign.(norm_ETB_ctry) .* abs.(vfactor.*norm_ETB_ctry) # i.e. if norm_ETB_ctry > 0 => too much exports in model => wages should increase (sign fⁿ gives ± of surplus)
-    # w_hat = w_hat .* (1.0 .+ δ ./ w_hat) # N×1, increase/decrease wages for countries with an excess surplus/deficit
-
-    # Problem: After first wage adjustment rounds the counterfactual output explodes (Y_prime)
-    # which causes the trade balance to be huge and VA_ctry is not enough to force: norm_ETB_ctry ∈ [0,1]
-    # hence wages increase by crazy amount
-    # Solution: normalize by using Y_prime_ctry adjusted by trade balance instead of VA_ctry, could also recalculate VA_prime_ctry?
-
-    # Problem: at some point the scaling of the adjustment δ ./ w_hat > 1 if w_hat is small enough
-    # hence w_hat becomes negative and we run in an infinitive loop
-    # Solution: do not scale adjustment by w_hat
-
-    # adjust wages to excess trade balance
-    Y_ctry = [sum(Y[i:i+S-1]) for i in 1:S:N*S] # N×1
-    norm_ETB_ctry =  ETB_ctry ./ (Y_ctry .- ETB_ctry) # N×1, normalized excess trade balance
+    norm_ETB_ctry =  ETB_ctry ./ VA_ctry # N×1, normalized excess trade balance
     δ = sign.(norm_ETB_ctry) .* abs.(vfactor.*norm_ETB_ctry) # i.e. if norm_ETB_ctry > 0 => too much exports in model => wages should increase (sign fⁿ gives ± of surplus)
-    w_hat = w_hat .* (1.0 .+ δ) # N×1, increase/decrease wages for countries with an excess surplus/deficit
-
-
+    w_hat = w_hat .* (1.0 .+ δ ./ w_hat) # N×1, increase/decrease wages for countries with an excess surplus/deficit
+    
     return w_hat, Y_prime, ETB_ctry
 end

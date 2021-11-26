@@ -1,7 +1,7 @@
 
 
-S = 56
-N = 44
+S = 35
+N = 41
 
 Theta = ones(S)
 tauhat = rand(N*S, N*S)
@@ -241,3 +241,98 @@ norm_ETB_ctry =  ETB_ctry ./ VA_ctry # N×1, normalized excess trade balance
 δ = sign.(norm_ETB_ctry) .* abs.(vfactor.*norm_ETB_ctry) # i.e. if norm_ETB_ctry > 0 => too much exports in model => wages should increase (sign fⁿ gives ± of surplus)
 w_hat3 = w_hat .* (1.0 .+ δ ./ w_hat) # N×1, increase/decrease wages for countries with an excess surplus/deficit
 
+
+
+
+
+
+w_hat = rand(N)
+P0_hat_Z = rand(S, N*S)
+
+cost_hat_w = [w_hat[ceil(Int,i/S)]^VA_coeff[i] for i in 1:N*S] # NS×1, wages
+cost_hat_p = P0_hat_Z.^γ
+cost_hat_p = [prod(cost_hat_p[:,i]) for i in 1:N*S] # NS×1, price indices (prod is the same as sum just for multiplication)
+cost_hat = cost_hat_w .* cost_hat_p # NS×1
+cost_hat = reshape(cost_hat, S, N)
+
+cost_Z = π_Z .* cost_hat_Z # NS×NS, origin country-industry destination country-industry price index (inside of summation)
+
+# sum over origin countries => price index of country-industry composite good in industry
+P_hat_Z = [sum(cost_Z[i:S:(N-1)*S+i, j])^(-1/θ[i,ceil(Int,j/S)]) for i in 1:S, j in 1:N*S]
+
+######################
+
+cost = ones(S,N)
+VAcoeff = reshape(VA_coeff, S, N)
+for s in 1:S
+    for j in 1:N
+        cost[s,j] = w_hat_prev[j]^VAcoeff[s,j]
+        for r in 1:S
+            cost[s,j] = cost[s,j]*P_hat_Z[r,(j-1)*S+s]^γ[r,(j-1)*S+s]
+        end
+    end
+end
+
+PrsijHat = zeros(N*S, N*S)
+θ = reshape(θ, S, N)
+
+for i in 1:N
+    for r in 1:S
+        for j in 1:N
+            for s in 1:S
+                iirr = (i-1)*S+r
+                jjss = (j-1)*S+s
+                PrsijHat[iirr,jjss] = (τ_hat_Z[iirr,jjss]*cost[r,i])^(-θ[r,i])
+            end
+        end
+    end
+end
+
+PrsijHat
+
+
+PrsjHat = zeros(S,N*S)
+
+for r in 1:S
+    for j in 1:N
+        for s in 1:S
+            jjss = (j-1)*S+s
+            PrsjHat[r,jjss] = (sum(π_Z[r:S:(N-1)*S+r,jjss] .* PrsijHat[r:S:(N-1)*S+r,jjss]))^(-1/θ[r,j])
+        end
+    end
+end
+PrsjHat
+
+PiHat = PrsijHat ./ (repmat(PrsjHat,N,1))
+
+
+
+
+
+
+
+
+w_hat = ones(N)
+
+
+F_prime_ctry = w_hat .* VA_ctry .- TB_ctry # N×1, counterfactual country final goods consumption
+
+# Goods market clearing from equation (35)
+total_sales_F = π_F .* repeat(α,N) .* repeat(transpose(F_prime_ctry),N*S) # NS×N
+total_sales_F = [sum(total_sales_F[i,:]) for i in 1:N*S] # N×1
+
+A_prime = π_Z .* repeat(γ, N) # NS×NS, intermediate input coefficient matrix
+
+Y_prime = inv(I - A_prime) * total_sales_F #  NS×1
+Y_prime = ifelse.(Y_prime .< 0.0, 0.0, Y_prime) # Antras and Chor (2018)
+
+
+F_prime_ctry ≈ F_ctry
+
+count(abs.(F_prime_ctry.-F_ctry).>0.7)
+
+
+Z_prime = π_Z .* repeat(γ, N) .* repeat(transpose(Y), N*S) # NS×NS
+F_prime = π_F .* repeat(α, N) .* repeat(transpose(F_ctry), N*S) # NS×N
+count(abs.(Z_prime.-Z).>1)
+count(abs.(F_prime.-F).>1)

@@ -2,7 +2,7 @@
 # Script for the baseline model
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-using DataFrames, RData, LinearAlgebra, Statistics
+using DataFrames, RData, LinearAlgebra, Statistics, XLSX
 
 include("transform_WIOD_2016_3.jl") # Script with functions to import and transform raw data
 include("price_hat.jl") # Script with function to obtain the price index
@@ -11,8 +11,8 @@ include("wage_hat.jl") # Script with function to obtain the wages and gross outp
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 years = 2000:2014 # vector with years covered by WIOD Rev. 2016
-N = 44 # number of countries 
-S = 56 # number of industries
+N = 41 # number of countries 
+S = 35 # number of industries
 dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -21,7 +21,7 @@ function baseline(dir::String, year::Integer, N::Integer, S::Integer)
     
     # iteration parameters
     vfactor = 0.4
-    tolerance = 1e-3
+    tolerance = 1e-6
     max_iteration = 100
     iteration = 0
     max_error = 1e7
@@ -36,12 +36,12 @@ function baseline(dir::String, year::Integer, N::Integer, S::Integer)
 
     # initialize wages and price indices
     w_hat = ones(N) # N×1
-    #w_hat = fill(2.0, N)
+
     # ------------
 
-    Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_WIOD_2016(dir, year, N, S)
+    Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_WIOD_2016(dir, "excel", year, N, S)
 
-    TB_ctry .= 0.0
+    #TB_ctry .= 0.0 # (if active => adjustments such that there is no trade deficit, i.e. counterfactual in itself)
 
     # ------------
 
@@ -59,7 +59,7 @@ function baseline(dir::String, year::Integer, N::Integer, S::Integer)
         # store last wage in case new optimization obtains negative wages
         w_hat_prev = copy(w_hat)
 
-        w_hat, Y_prime, ETB_ctry = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, Y, γ, α)
+        w_hat, Y_prime, ETB_ctry = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
 
         # update iteration parameters
         error = abs.(w_hat .- w_hat_prev)
@@ -67,13 +67,12 @@ function baseline(dir::String, year::Integer, N::Integer, S::Integer)
         iteration += 1 # update iteration count
 
         if minimum(w_hat) < 0.0
-            w_hat = copy(w_hat_prev)
+            w_hat[:] = copy(w_hat_prev)
             println("Iteration $iteration completed with error $max_error (wage negative, rerun with previous estimate)")
         else
             println("Iteration $iteration completed with error $max_error")
         end
 
-        
 
     end
 
@@ -84,4 +83,4 @@ function baseline(dir::String, year::Integer, N::Integer, S::Integer)
 end
 
 
-w_hat, Y_prime, ETB_ctry, π_prime_Z, π_prime_F, α, γ = baseline(dir, 2014, N, S)
+w_hat, Y_prime, ETB_ctry, π_prime_Z, π_prime_F, α, γ = baseline(dir, 2011, N, S)

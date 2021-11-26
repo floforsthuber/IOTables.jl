@@ -81,7 +81,7 @@ julia> Z, F, IV = import_excel(dir, 2012)
 function import_excel(dir::String, year::Integer, N::Integer, S::Integer)
 
     # load data for specified year and transform into a DataFrame (automatically)
-    path = dir * "WIOT95_ROW_Apr12.xlsx"
+    path = dir * "WIOT" * string(year)[end-1:end] * "_ROW_Apr12.xlsx"
     df = DataFrame(XLSX.readxlsx(path)["WIOT_$year"][:], :auto)
     df = df[7:end,5:end]
 
@@ -135,8 +135,8 @@ julia> Z, F, Y, VA = create_matrices(WIOD_2012, N, S)
 function create_matrices(Z::Matrix, F::Matrix, IV::Matrix, N::Integer, S::Integer)
 
     # remove zero and negative entries (page 37 Antras and Chor, 2018)
-    Z = ifelse.(Z .<= 0.0, 1e-18, Z) # needed for model simulation, otherwise NaN
-    F = ifelse.(F .<= 0.0, 1e-18, F)
+    #Z = ifelse.(Z .<= 0.0, 1e-18, Z) 
+    #F = ifelse.(F .<= 0.0, 1e-18, F)
 
     IV = [sum(IV[i,:]) for i in 1:N*S] # NS×1
 
@@ -151,15 +151,18 @@ function create_matrices(Z::Matrix, F::Matrix, IV::Matrix, N::Integer, S::Intege
     Z = Z .* (repeat(Y, 1, N*S) ./ repeat(adj, 1, N*S)) # NS×NS
     Z = ifelse.(isnan.(Z), 0.0, Z)
     Z = ifelse.(isinf.(Z), 0.0, Z)
+    Z = ifelse.(Z .< 0.0, 0.0, Z)
 
     F = F .* (repeat(Y, 1, N*4) ./ repeat(adj, 1, N*4)) # NS×N*4, inventory adjustment
     F = ifelse.(isnan.(F), 0.0, F)
     F = ifelse.(isinf.(F), 0.0, F)
+    F = ifelse.(F .< 0.0, 0.0, F)
     F = [sum(F[i,j:j+3]) for i in 1:N*S, j in 1:4:N*4] # NS×N
 
     # Use computed values to have internal consistency
     Y = [sum(Z[i,:]) + sum(F[i,:]) for i in 1:N*S] # NS×1
     VA = [Y[i] - sum(Z[:,i]) for i in 1:N*S] # NS×1, compute value added (gross output minus inputs)
+    VA = ifelse.(VA .< 0.0, 1e-18, VA) # in case one is negative
 
     return Z, F, Y, VA
 end
@@ -245,10 +248,12 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, 
     γ_VA = [Z_agg_VA[i,j]/sum(Z_agg_VA[:,j]) for i in 1:S+1, j in 1:N*S]
     γ = γ_VA[1:S, 1:N*S] # S×NS
     γ = ifelse.(isnan.(γ), 0.0, γ) # some entries in potentially equal to zero => NaN => assume 0
+    γ = ifelse.(γ .> 1.0, 1.0, γ) # if value explode attribute reduce to 1.0 (for country-sector where VA is negative)
 
     # Country-industry level value added coefficients
     VA_coeff = γ_VA[S+1, 1:N*S] # NS×1
     VA_coeff = ifelse.(isnan.(VA_coeff), 1.0, VA_coeff) # some entries in potentially equal to zero => NaN, assume VA coefficient to be 1
+    VA_coeff = ifelse.(VA_coeff .< 0.0, 0.0, VA_coeff)
 
     # Country level value added
     VA_ctry = [sum(VA[i:i+S-1]) for i in 1:S:N*S] # N×1
@@ -290,7 +295,7 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, 
     #     end
     # end
 
-    #TB_ctry = E_A .- M_A # N×1
+    # TB_ctry = E_A .- M_A # N×1
 
     #TB_ctry == VA_ctry .- F_ctry # must hold, holds much better with own calculation?
 
@@ -330,9 +335,14 @@ The function imports and transforms the raw data for further use in the model.
 julia> Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_WIOD_2016(dir, 2014)
 ```
 """
-function transform_WIOD_2016(dir::String, year::Integer, N::Integer, S::Integer)
+function transform_WIOD_2016(dir::String, format::String, year::Integer, N::Integer, S::Integer)
 
-    Z, F, IV = import_R(dir, year, N, S)
+    if format == "excel"
+        Z, F, IV = import_excel(dir, year, N, S)
+    else
+        Z, F, IV = import_R(dir, year, N, S)
+    end
+
     Z, F, Y, VA = create_matrices(Z, F, IV, N, S)
     π_Z, π_F = create_trade_shares(Z, F, N, S)
     γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, VA, π_Z, π_F, N, S)
