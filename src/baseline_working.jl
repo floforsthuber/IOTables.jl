@@ -71,3 +71,5 @@ while max_error > tolerance && iteration <= max_iteration
 
 
 end
+
+count(abs.(Y_prime ./ Y .- 1.0) .> 1e-3 .* Y)
