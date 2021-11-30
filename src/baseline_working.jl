@@ -2,9 +2,9 @@
 # Baseline model
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-using DataFrames, RData, LinearAlgebra, Statistics, XLSX
+using DataFrames, RData,  XLSX, LinearAlgebra, Statistics
 
-include("transform_WIOD_2016_3.jl") # Script with functions to import and transform raw data
+include("transform_data.jl") # Script with functions to import and transform raw data
 include("price_hat.jl") # Script with function to obtain the price index
 include("wage_hat.jl") # Script with function to obtain the wages and gross output
 
@@ -17,7 +17,7 @@ dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_WIOD_2016(dir, "excel", 1995, N, S)
+Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, "2013", 1995, N, S)
 
 # iteration parameters
 vfactor = 0.4
