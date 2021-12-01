@@ -40,7 +40,7 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
 
     # iteration parameters
     tolerance_p = 1e-3
-    max_iteration_p = 50
+    max_iteration_p = 100
     iteration_p = 0
     max_error_p = 1.0
 
@@ -100,7 +100,7 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
         P0_hat_Z[:] = copy(P_hat_Z) # update to new price index
         iteration_p += 1 # update iteration count
 
-        println("Opt. P: Iteration $iteration_p completed with error $max_error_p") # print update on progress
+        println(" - Inner loop: Iteration $iteration_p completed with error $max_error_p") # print update on progress
 
     end
 
@@ -116,7 +116,7 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
         end
     end
 
-    P_hat_F = zeros(S, N)
+    global P_hat_F = zeros(S, N)
     for r in 1:S
         for j in 1:N
             P_hat_F[r,j] = (sum(π_F[r:S:(N-1)*S+r,j] .* cost_hat_F[r:S:(N-1)*S+r,j]))^(-1/θ[r,j])
@@ -129,10 +129,10 @@ function create_price_index_hat(w_hat::Vector, τ_hat_Z::Matrix, τ_hat_F::Matri
     # trade shares from equation (45) and (46)
     θ = vec(θ)
     θ = repeat(θ, 1, N*S)
-    π_hat_Z = cost_hat_Z ./ repeat(P_hat_Z, N) .^ (.-θ) # NS×NS, !cost_hat_Z is already to power of -θ => only P_hat_Z^-θ
+    global π_hat_Z = cost_hat_Z ./ repeat(P_hat_Z, N) .^ (.-θ) # NS×NS, - cost_hat_Z is already to power of -θ => only P_hat_Z^-θ
 
     θ = θ[:, 1:N] # reduce to one NS×N again
-    π_hat_F = cost_hat_F ./ repeat(P_hat_F, N) .^ (.-θ) # NS×N, !cost_hat_Z is already to power of -θ => only P_hat_Z^-θ
+    global π_hat_F = cost_hat_F ./ repeat(P_hat_F, N) .^ (.-θ) # NS×N,  - cost_hat_Z is already to power of -θ => only P_hat_Z^-θ
 
     return P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat
 end

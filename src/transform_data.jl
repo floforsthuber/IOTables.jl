@@ -67,8 +67,7 @@ end
 """
     inventory_adjustment(Z::Matrix, F::Matrix, IV::Matrix, N::Integer, S::Integer)
 
-The function creates the origin country-industry destination country-industry intermediate demand matrix Z and 
-    the country-industry VA vector.
+The function performs the inventory adjustment procedure proposed in Antras et al. (2012).
 
 # Arguments
 - `Z::Matrix`: NS×NS, raw origin country-industry destination country-industry intermediate demand matrix Z.
@@ -211,12 +210,12 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, 
     γ_VA = [Z_agg_VA[i,j]/sum(Z_agg_VA[:,j]) for i in 1:S+1, j in 1:N*S]
 
     γ = γ_VA[1:S, 1:N*S] # S×NS
-    γ = ifelse.(isnan.(γ), 0.0, γ) # needed in case Z_agg_VA = 0 (highly unlikely since all entries in Z, VA >= 0)
+    γ = ifelse.(isnan.(γ), 0.0, γ) # needed in case Z_agg_VA = 0 (unlikely since all entries in Z, VA >= 0, but still necessary)
     !any(0.0 .<= γ .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
 
     # Country-industry level value added coefficients
     VA_coeff = γ_VA[S+1, 1:N*S] # NS×1
-    VA_coeff = ifelse.(isnan.(VA_coeff), 1.0, VA_coeff) # needed in case Z_agg_VA = 0 (highly unlikely since all entries in Z, VA >= 0)
+    VA_coeff = ifelse.(isnan.(VA_coeff), 1.0, VA_coeff) # needed in case Z_agg_VA = 0 (unlikely since all entries in Z, VA >= 0, but still necessary)
     #VA_coeff = ifelse.(VA_coeff .< 0.0, 0.0, VA_coeff)
 
     # Country level value added
@@ -227,7 +226,7 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, 
 
     # Country-industry final import expenditure shares (columns sum to 1)
     α = [sum(F[i:S:(N-1)*S+i, j])/F_ctry[j] for i in 1:S, j in 1:N] # S×N
-    α = ifelse.(isnan.(α), 0.0, α) # needed in case F_ctry = 0 (highly unlikely since all entries in F >= 0)
+    α = ifelse.(isnan.(α), 0.0, α) # needed in case F_ctry = 0 (unlikely since all entries in F >= 0, but still necessary)
     !any(0.0 .<= α .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
 
     # Country level trade balance (exports - imports)
