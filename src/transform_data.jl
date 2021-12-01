@@ -64,9 +64,8 @@ end
 
 # --------------- Transformations -----------------------------------------------------------------------------------------------------------------------------
 
-
 """
-    clean_data(df::DataFrame, N::Integer, S::Integer)
+    inventory_adjustment(Z::Matrix, F::Matrix, IV::Matrix, N::Integer, S::Integer)
 
 The function creates the origin country-industry destination country-industry intermediate demand matrix Z and 
     the country-industry VA vector.
@@ -86,40 +85,44 @@ The function creates the origin country-industry destination country-industry in
 
 # Examples
 ```julia-repl
-julia> Z, F, Y, VA = clean_data(WIOD_2012, N, S)
+julia> Z, F, Y, VA = inventory_adjustment(Z, F, IV, N, S)
 ```
 """
-function clean_data(Z::Matrix, F::Matrix, IV::Matrix, N::Integer, S::Integer)
+
+function inventory_adjustment(Z::Matrix, F::Matrix, IV::Matrix, N::Integer, S::Integer)
 
     # remove zero and negative entries (page 37 Antras and Chor, 2018)
     #Z = ifelse.(Z .<= 0.0, 1e-18, Z) 
     #F = ifelse.(F .<= 0.0, 1e-18, F)
 
-    IV = [sum(IV[i,:]) for i in 1:N*S] # NS×1
+    Z = ifelse.(Z .< 0.0, 0.0, Z) # no negative values possible in Z
+    F = ifelse.(F .< 0.0, 0.0, F) # no negative values possible in F
 
-    # Compute gross output from intermediate and final demand
-    Y = [sum(Z[i,:]) + sum(F[i,:]) + IV[i] for i in 1:N*S] # NS×1
-    Y = ifelse.(abs.(Y) .< 1e-18, 0.0, Y)
-   
     # Inventory adjustment (spread IV regardless of origin over all columns)
-    adj = Y .- IV # NS×1
-    adj = ifelse.(adj .< 0.0, 0.0, adj) # in case negative
+    IV = [sum(IV[i,:]) for i in 1:N*S] # NS×1, negative values possible
+    Y = [sum(Z[i,:]) + sum(F[i,:]) + IV[i] for i in 1:N*S] # NS×1, possibly negative if IV is negative enough
+    Y = ifelse.(Y .< 0.0, 0.0, Y) # exclude negative values
 
-    Z = Z .* (repeat(Y, 1, N*S) ./ repeat(adj, 1, N*S)) # NS×NS, inventory adjustment
+    adjustment = Y .- IV # NS×1
+    adjustment = ifelse.(adjustment .< 0.0, 0.0, adjustment) # in case negative, as in Antras and Chor (2018)
+
+    # Inventory adjustment
+    Z = Z .* ( repeat(Y, 1, N*S) ./ repeat(adjustment, 1, N*S) ) # NS×NS, inventory adjustment
     Z = ifelse.(isnan.(Z), 0.0, Z)
     Z = ifelse.(isinf.(Z), 0.0, Z)
-    Z = ifelse.(Z .< 0.0, 0.0, Z)
+    Z = ifelse.(Z .< 0.0, 0.0, Z) # NS×NS
 
-    F = F .* (repeat(Y, 1, N*4) ./ repeat(adj, 1, N*4)) # NS×N*4, inventory adjustment
+    F = F .* ( repeat(Y, 1, N*4) ./ repeat(adjustment, 1, N*4) ) # NS×N*4, inventory adjustment
     F = ifelse.(isnan.(F), 0.0, F)
     F = ifelse.(isinf.(F), 0.0, F)
     F = ifelse.(F .< 0.0, 0.0, F)
-    F = [sum(F[i,j:j+3]) for i in 1:N*S, j in 1:4:N*4] # NS×N
+    F = [sum(F[i,j:j+3]) for i in 1:N*S, j in 1:4:N*4] # NS×N, sum all types of final demand
 
-    # Use computed values to have internal consistency
+    # Use computed values for Y and VA to have internal consistency
     Y = [sum(Z[i,:]) + sum(F[i,:]) for i in 1:N*S] # NS×1
-    VA = [Y[i] - sum(Z[:,i]) for i in 1:N*S] # NS×1, compute value added (gross output minus inputs)
-    VA = ifelse.(VA .< 0.0, 1e-18, VA) # in case one is negative
+
+    VA = [Y[i] - sum(Z[:,i]) for i in 1:N*S] # NS×1, compute value added (gross output minus sum of inputs)
+    VA = ifelse.(VA .< 0.0, 0.0, VA) # in case one is negative (actually problematic since Z, F, Y internally consistent but not VA)
 
     return Z, F, Y, VA
 end
@@ -149,15 +152,18 @@ The function computes the origin country-industry destination country intermedia
 julia> π_Z, π_F = create_trade_shares(Z, F, N, S)
 ```
 """
+
 function create_trade_shares(Z::Matrix, F::Matrix, N::Integer, S::Integer)
 
-    Z_agg = [sum(Z[s:S:(N-1)*S+s,j]) for s in 1:S, j in 1:N*S] # S×NS
+    Z_agg = [sum(Z[s:S:(N-1)*S+s,j]) for s in 1:S, j in 1:N*S] # S×NS, sum over origin industries
     π_Z = Z ./ repeat(Z_agg, N) # NS×NS
-    π_Z = ifelse.(isnan.(π_Z), 0.0, π_Z)
+    π_Z = ifelse.(isnan.(π_Z), 0.0, π_Z) # needed in case Z_agg = 0 (highly unlikely  since all entries in Z >= 0)
+    !any(0.0 .<= π_Z .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
     
-    F_agg = [sum(F[s:S:(N-1)*S+s,j]) for s in 1:S, j in 1:N] # S×N
+    F_agg = [sum(F[s:S:(N-1)*S+s,j]) for s in 1:S, j in 1:N] # S×N, sum over origin industries
     π_F = F ./ repeat(F_agg, N) # NS×N
-    π_F = ifelse.(isnan.(π_F), 0.0, π_F)
+    π_F = ifelse.(isnan.(π_F), 0.0, π_F) # needed in case F_agg = 0 (highly unlikely since all entries in F >= 0)
+    !any(0.0 .<= π_Z .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
 
     return π_Z, π_F
 end
@@ -196,33 +202,36 @@ The function computes the country value added vector VA_ctry respecting inventor
 julia> γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, π_Z, π_F, VA, N, S)
 ```
 """
+
 function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, π_Z::Matrix, π_F::Matrix, N::Integer, S::Integer)
 
-    # Country-industry level input expenditure shares
-    # sum over reporting country only (eq. 37) => sum over column gives total intermediate consumption per country-industry (+ VA = Y)
-    Z_agg = [sum(Z[i:S:(N-1)*S+i, j]) for i in 1:S, j in 1:N*S]
-    Z_agg_VA = [Z_agg; VA']
+    # Country-industry level intermediate import expenditure shares
+    Z_agg = [sum(Z[i:S:(N-1)*S+i, j]) for i in 1:S, j in 1:N*S] # S×NS, sum over origin industries
+    Z_agg_VA = [Z_agg; transpose(VA)] # S+1×NS
     γ_VA = [Z_agg_VA[i,j]/sum(Z_agg_VA[:,j]) for i in 1:S+1, j in 1:N*S]
+
     γ = γ_VA[1:S, 1:N*S] # S×NS
-    γ = ifelse.(isnan.(γ), 0.0, γ) # some entries in potentially equal to zero => NaN => assume 0
-    γ = ifelse.(γ .> 1.0, 1.0, γ) # if value explode attribute reduce to 1.0 (for country-sector where VA is negative)
+    γ = ifelse.(isnan.(γ), 0.0, γ) # needed in case Z_agg_VA = 0 (highly unlikely since all entries in Z, VA >= 0)
+    !any(0.0 .<= γ .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
 
     # Country-industry level value added coefficients
     VA_coeff = γ_VA[S+1, 1:N*S] # NS×1
-    VA_coeff = ifelse.(isnan.(VA_coeff), 1.0, VA_coeff) # some entries in potentially equal to zero => NaN, assume VA coefficient to be 1
-    VA_coeff = ifelse.(VA_coeff .< 0.0, 0.0, VA_coeff)
+    VA_coeff = ifelse.(isnan.(VA_coeff), 1.0, VA_coeff) # needed in case Z_agg_VA = 0 (highly unlikely since all entries in Z, VA >= 0)
+    #VA_coeff = ifelse.(VA_coeff .< 0.0, 0.0, VA_coeff)
 
     # Country level value added
     VA_ctry = [sum(VA[i:i+S-1]) for i in 1:S:N*S] # N×1
 
-    # Final import demand at country level (sum over rows not columns - would give export demand)
+    # Final imports at country level (sum over rows not columns - otherwise exports)
     F_ctry = [sum(F[:,j]) for j in 1:N] # N×1
 
-    # Country-industry final consumption expenditure (import) shares => columns sum to 1
+    # Country-industry final import expenditure shares (columns sum to 1)
     α = [sum(F[i:S:(N-1)*S+i, j])/F_ctry[j] for i in 1:S, j in 1:N] # S×N
+    α = ifelse.(isnan.(α), 0.0, α) # needed in case F_ctry = 0 (highly unlikely since all entries in F >= 0)
+    !any(0.0 .<= α .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
 
     # Country level trade balance (exports - imports)
-    # need to calculate country level exports/imports (row/columns) (i.e. aggregate and remove intra-country trade)
+    # need to calculate country level exports/imports (i.e. aggregate and remove intra-country trade)
     E = [sum(Y[i:i+S-1]) - sum(Z[i:i+S-1,i:i+S-1]) - sum(F[i:i+S-1,ceil(Int, i/S)]) for i in 1:S:N*S] # N×1
 
     M_Z = [sum(Z[:,j:j+S-1]) - sum(Z[j:j+S-1,j:j+S-1]) for j in 1:S:N*S]
@@ -271,11 +280,13 @@ The function imports and transforms the raw data for further use in the model.
 ```julia-repl
 julia> Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, "2013", 1995, N, S)
 ```
+
 """
+
 function transform_data(dir::String, revision::String, year::Integer, N::Integer, S::Integer)
 
     Z, F, IV = import_data(dir, revision, year, N, S)
-    Z, F, Y, VA = clean_data(Z, F, IV, N, S)
+    Z, F, Y, VA = inventory_adjustment(Z, F, IV, N, S)
     π_Z, π_F = create_trade_shares(Z, F, N, S)
     γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, VA, π_Z, π_F, N, S)
 
@@ -283,3 +294,4 @@ function transform_data(dir::String, revision::String, year::Integer, N::Integer
 
     return Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F
 end
+
