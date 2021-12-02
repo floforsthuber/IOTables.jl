@@ -31,55 +31,88 @@ Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data
 
 ctry_names_2013 = ["AUS", "AUT", "BEL", "BGR", "BRA", "CAN", "CHN", "CYP", "CZE", "DEU", "DNK", "ESP", "EST", "FIN", "FRA", "GBR", 
     "GRC", "HUN", "IDN", "IND", "IRL", "ITA", "JPN", "KOR", "LTU", "LUX", "LVA", "MEX", "MLT", "NLD", "POL", "PRT", "ROM", "RUS", 
-    "SVK", "SVN", "SWE", "TUR", "TWN", "USA", "RoW"]
+    "SVK", "SVN", "SWE", "TUR", "TWN", "USA"]
+ctry_names_2013 = [ctry_names_2013; "ZoW"] # use "ZoW" instead of "RoW" so we can sort later on
 
-industries = 1:S
-
-
-row_col_names = repeat(ctry_names_2013, inner=S) .* "__" .* string.(repeat(industries, outer=N))
-τ = DataFrame([row_col_names ones(N*S, N*S)], ["reporter"; row_col_names])
-τ2 = stack(τ, Not(:reporter))
-rename!(τ2, :variable => :partner)
-
-# τ_reporter = reduce(vcat, permutedims.(split.(τ2[:,:reporter], "__")))
-# τ_partner = reduce(vcat, permutedims.(split.(τ2[:,:variable], "__")))
-# τ = DataFrame([τ_reporter τ_partner τ2.variable τ2.value], [:reporter_ctry, :reporter_ind, :partner_ctry, :partner_ind, :variable, :value])
+industries = lpad.(1:S, 2, '0') # left pad with leading zeros so we can sort later on
 
 
-
-reporter_ctry = ["POL"]
-partner_ctry = ["AUT", "BEL"]
-reporter_ID = repeat(reporter_ctry .* "__" .* string.(industries), inner=S*length(partner_ctry))
-partner_ID = repeat(repeat(partner_ctry, inner=S) .* "__" .* repeat(string.(industries), outer=length(partner_ctry)), outer=S)
-τ_new = DataFrame([reporter_ID partner_ID fill(1.2, length(partner_ID))], [:reporter, :partner, :tariffs])
+# tau
 
 
-a = leftjoin(τ2, τ_new, on=[:reporter, :partner]) 
-a.tariffs .= ifelse.(ismissing.(a.tariffs), a.value, a.tariffs)
+function collect_trade_costs(party_one::Vector, party_two::Vector)
 
-b = leftjoin(τ2, a, on=[:reporter, :partner], makeunique=true) # problem now is that it is not sorted!
+    exporter_ctry = party_one
+    importer_ctry = party_two
+
+    exporter_ID = repeat(exporter_ctry, inner=S) .* "__" .* repeat(industries, outer=length(exporter_ctry))
+    importer_ID = repeat(importer_ctry, inner=S) .* "__" .* repeat(industries, outer=length(importer_ctry))
+
+    exporter = repeat(exporter_ID, inner=length(importer_ID))
+    importer = repeat(importer_ID, outer=length(exporter_ID))
+    exporter_sector = reduce(vcat, permutedims.(split.(exporter, "__")))[:, 2] # to match with tariff data (on sectoral level)
+    importer_ctry_F = reduce(vcat, permutedims.(split.(importer, "__")))[:, 1] # to match with final demand
+
+    τ_new_1 = DataFrame([exporter importer exporter_sector importer_ctry_F fill(1.2, length(exporter_sector)) fill(1.2, length(exporter_sector))], 
+        [:exporter, :importer, :exporter_sector, :importer_ctry, :tariffs_Z, :tariffs_F])
+
+    # -------
+
+    exporter_ctry = party_two
+    importer_ctry = party_one
+
+    exporter_ID = repeat(exporter_ctry, inner=S) .* "__" .* repeat(industries, outer=length(exporter_ctry))
+    importer_ID = repeat(importer_ctry, inner=S) .* "__" .* repeat(industries, outer=length(importer_ctry))
+
+    exporter = repeat(exporter_ID, inner=length(importer_ID))
+    importer = repeat(importer_ID, outer=length(exporter_ID))
+    exporter_sector = reduce(vcat, permutedims.(split.(exporter, "__")))[:, 2] # to match with tariff data (on sectoral level)
+    importer_ctry_F = reduce(vcat, permutedims.(split.(importer, "__")))[:, 1] # to match with final demand
+
+    τ_new_2 = DataFrame([exporter importer exporter_sector importer_ctry_F fill(1.2, length(exporter_sector)) fill(1.2, length(exporter_sector))], 
+        [:exporter, :importer, :exporter_sector, :importer_ctry, :tariffs_Z, :tariffs_F])
+
+    # -------
+
+    τ_new = vcat(τ_new_1, τ_new_2)
+
+    return τ_new
+
+end
+
+τ_new = collect_trade_costs(["POL", "GBR"], ["AUT", "BEL"])
 
 
-# takes too long
+# τ_hat_Z
 
-# row_col_names = repeat(ctry_names_2013, inner=S) .* "__" .* string.(repeat(industries, outer=N))
-# τ = DataFrame([row_col_names ones(N*S, N*S)], ["reporter"; row_col_names])
-# τ2 = stack(τ, Not(:reporter))
-# rename!(τ2, :variable => :partner)
+col_names = repeat(ctry_names_2013, inner=S) .* "__" .* repeat(industries, outer=N)
+τ = DataFrame([row_col_names ones(N*S, N*S)], ["exporter"; col_names])
+τ2 = stack(τ, Not(:exporter))
+rename!(τ2, :variable => :importer)
+
+τ3 = leftjoin(τ2, τ_new, on=[:exporter, :importer])
+τ3.tariffs_Z = ifelse.(ismissing.(τ3.tariffs_Z), τ3.value, τ3.tariffs_Z)
+τ4 = sort(τ3, [:exporter, :importer])
+τ4 = τ4[:, [:exporter, :importer, :tariffs_Z]]
+τ5 = unstack(τ4, :importer, :tariffs_Z)
+
+τ_hat_Z_new = Matrix(convert.(Float64, τ5[:,2:end])) # NS×NS
+
+# τ_hat_F
+
+col_names = repeat(ctry_names_2013, inner=S) .* "__" .* repeat(industries, outer=N)
+τ = DataFrame([row_col_names ones(N*S, N)], ["exporter"; ctry_names_2013])
+τ2 = stack(τ, Not(:exporter))
+rename!(τ2, :variable => :importer_ctry)
+
+τ3 = leftjoin(τ2, τ_new, on=[:exporter, :importer_ctry])
+τ3.tariffs_F = ifelse.(ismissing.(τ3.tariffs_F), τ3.value, τ3.tariffs_F)
+τ4 = sort(τ3, [:exporter, :importer_ctry])
+τ4 = τ4[:, [:exporter, :importer_ctry, :tariffs_F]]
+
+τ5 = unstack(τ4, :importer_ctry, :tariffs_F, allowduplicates=true)
+τ_hat_F_new = Matrix(convert.(Float64, τ5[:,2:end])) # NS×N
 
 
-# reporter_ctry = ["POL"]
-# partner_ctry = ["AUT", "BEL"]
-# reporter_ID = repeat(reporter_ctry .* "__" .* string.(industries), inner=S*length(partner_ctry))
-# partner_ID = repeat(repeat(partner_ctry, inner=S) .* "__" .* repeat(string.(industries), outer=length(partner_ctry)), outer=S)
-# τ_new = DataFrame([reporter_ID partner_ID fill(1.2, length(partner_ID))], [:reporter, :partner, :tariffs])
-
-# for i in unique(τ_new.reporter)
-#     for j in unique(τ_new.partner)
-#         tariff = τ_new.tariffs[findfirst((τ_new.reporter .== i) .& (τ_new.partner .== j))]
-#         τ2.value[findfirst((τ2.reporter .== i) .& (τ2.partner .== j))] = tariff
-#         τ2.value[findfirst((τ2.reporter .== j) .& (τ2.partner .== i))] = tariff
-#     end
-# end
 
 
