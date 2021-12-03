@@ -70,12 +70,14 @@ df_tariffs[:, :avg_tariff_Z_soft] .= (df_tariffs.avg_tariff_F_soft .- 1) ./ 2 .+
 df_tariffs[:, :avg_tariff_Z_hard] .= (df_tariffs.avg_tariff_F_hard .- 1) ./ 2 .+ 1
 
 
-# Functions to insert new trade costs into the appropriate cells
-function create_country_sector_pairs(party_one::Vector, party_two::Vector, industries::Vector, N::Integer, S::Integer)
+# Functions to insert new trade costs into the appropriate cells (asymmetric trade costs possible)
+function create_country_sector_pairs(ctry_one::Vector, ctry_two::Vector, tariffs_one::DataFrame, tariffs_two::DataFrame, industries::Vector, N::Integer, S::Integer)
 
-    # uses countries in vector "party_one" as exporters
-    exporter_ctry = party_one
-    importer_ctry = party_two
+    # uses countries in vector "ctry_one" as exporters which pay tariffs "tariffs_one" to importer countries "ctry_two"
+    # as the importing ctry levy the tariffs depending on the product (sector) of the exporters
+    # we need to match with the exporter with the sector of the exporter!
+    exporter_ctry = ctry_one
+    importer_ctry = ctry_two
 
     exporter_ID = repeat(exporter_ctry, inner=S) .* "__" .* repeat(industries, outer=length(exporter_ctry))
     importer_ID = repeat(importer_ctry, inner=S) .* "__" .* repeat(industries, outer=length(importer_ctry))
@@ -85,13 +87,16 @@ function create_country_sector_pairs(party_one::Vector, party_two::Vector, indus
     exporter_sector = reduce(vcat, permutedims.(split.(exporter, "__")))[:, 2] # to match with tariff data (on sectoral level)
     importer_ctry_F = reduce(vcat, permutedims.(split.(importer, "__")))[:, 1] # to match with final demand country
 
-    τ_new_1 = DataFrame([exporter importer exporter_sector importer_ctry_F], [:exporter, :importer, :exporter_sector, :importer_ctry])
+    setup_one = DataFrame([exporter importer exporter_sector importer_ctry_F], [:exporter, :importer, :exporter_sector, :importer_ctry])
+    df_one = rename(tariffs_one, :industry_WIOD_2016 => :exporter_sector)
+
+    τ_one = leftjoin(setup_one, df_one, on=:exporter_sector)
 
     # -------
 
-    # uses countries in vector "party_two" as exporters
-    exporter_ctry = party_two
-    importer_ctry = party_one
+    # uses countries in vector "ctry_two" as exporters which pay tariffs "tariffs_two" to importer countries "ctry_one"
+    exporter_ctry = ctry_two
+    importer_ctry = ctry_one
 
     exporter_ID = repeat(exporter_ctry, inner=S) .* "__" .* repeat(industries, outer=length(exporter_ctry))
     importer_ID = repeat(importer_ctry, inner=S) .* "__" .* repeat(industries, outer=length(importer_ctry))
@@ -101,23 +106,24 @@ function create_country_sector_pairs(party_one::Vector, party_two::Vector, indus
     exporter_sector = reduce(vcat, permutedims.(split.(exporter, "__")))[:, 2] # to match with tariff data (on sectoral level)
     importer_ctry_F = reduce(vcat, permutedims.(split.(importer, "__")))[:, 1] # to match with final demand
 
-    τ_new_2 = DataFrame([exporter importer exporter_sector importer_ctry_F], [:exporter, :importer, :exporter_sector, :importer_ctry])
+    setup_two = DataFrame([exporter importer exporter_sector importer_ctry_F], [:exporter, :importer, :exporter_sector, :importer_ctry])
+    df_two = rename(tariffs_two, :industry_WIOD_2016 => :exporter_sector)
+
+    τ_two = leftjoin(setup_two, df_two, on=:exporter_sector)
 
     # -------
 
-    # allows for asymmetric bilateral trade costs (however, model does not!)
-    τ_new = vcat(τ_new_1, τ_new_2)
+    # allows for asymmetric bilateral trade costs
+    τ_new = vcat(τ_two, τ_two)
 
     return τ_new
 
 end
 
 
-function create_τ_hat(affected::DataFrame, tariffs::DataFrame, scenario::Symbol, countries::Vector, N::Integer, S::Integer)
+function create_τ_hat(df::DataFrame, scenario::Symbol, countries::Vector, N::Integer, S::Integer)
 
-    # match tariff data with affected
-    df = rename(tariffs, :industry_WIOD_2016 => :exporter_sector)
-    df = leftjoin(affected, df, on=:exporter_sector)
+    # select tariff
     df = df[:, [:exporter, :importer, :exporter_sector, :importer_ctry, scenario]]
     rename!(df, scenario => :tariffs)
 
@@ -132,7 +138,7 @@ function create_τ_hat(affected::DataFrame, tariffs::DataFrame, scenario::Symbol
     τ_hat_Z.tariffs = ifelse.(ismissing.(τ_hat_Z.tariffs), τ_hat_Z.value, τ_hat_Z.tariffs)
     sort!(τ_hat_Z, [:exporter, :importer]) # sort to have same sorting as IO Table (thats why we use "ZoR" instead of "RoW")
     τ_hat_Z = τ_hat_Z[:, [:exporter, :importer, :tariffs]]
-    τ_hat_Z = unstack(τ_hat_Z, :importer, :tariffs)
+    τ_hat_Z = unstack(τ_hat_Z, :importer, :tariffs, allowduplicates=true)
 
     τ_hat_Z = Matrix(convert.(Float64, τ_hat_Z[:, 2:end])) # NS×NS
 
@@ -155,12 +161,12 @@ end
 ctry_exiting_EU = ["DEU"]
 ctry_remaining_EU = filter(x-> !(x in ctry_exiting_EU), ctry_EU27)
 
-df_affected = create_country_sector_pairs(ctry_exiting_EU, ctry_remaining_EU, industries, N, S)
+df_affected = create_country_sector_pairs(ctry_exiting_EU, ctry_remaining_EU, df_tariffs, df_tariffs, industries, N, S)
 
-τ_hat_Z, τ_hat_F = create_τ_hat(df_affected, df_tariffs, :avg_tariff_F_soft, ctry_names_2013, N, S)
+τ_hat_Z, τ_hat_F = create_τ_hat(df_affected, :avg_tariff_F_soft, ctry_names_2013, N, S)
 
-XLSX.writetable("clean/tau_Z.xlsx", Tables.table(τ_hat_Z), overwrite=true)
-XLSX.writetable("clean/tau_F.xlsx", Tables.table(τ_hat_F), overwrite=true)
+#XLSX.writetable("clean/tau_Z.xlsx", Tables.table(τ_hat_Z), overwrite=true)
+#XLSX.writetable("clean/tau_F.xlsx", Tables.table(τ_hat_F), overwrite=true)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
