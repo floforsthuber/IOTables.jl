@@ -19,9 +19,9 @@ The function loads the WIOD Input-Output Table of specified year as DataFrame in
 - `S::Integer`: number of origin/destination industries.
 
 # Output
-- `Z::Matrix`: NS×NS, raw origin country-industry destination country-industry intermediate demand matrix Z.
-- `F::Matrix`: NS×N, raw origin country-industry destination country final demand matrix F.
-- `IV::Matrix`: NS×N, raw origin country-industry destination country inventory adjustment matrix IV.
+- `Z::Matrix{Float64}`: NS×NS, raw origin country-industry destination country-industry intermediate demand matrix Z.
+- `F::Matrix{Float64}`: NS×N, raw origin country-industry destination country final demand matrix F.
+- `IV::Matrix{Float64}`: NS×N, raw origin country-industry destination country inventory adjustment matrix IV.
 
 # Examples
 ```julia-repl
