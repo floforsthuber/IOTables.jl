@@ -1,12 +1,12 @@
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
-# Script with functions to create bilateral Head-Reis index (trade costs)
+# Script with functions to create bilateral Head-Ries index (symmetric bilateral trade costs)
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 """
-    head_reis_index(Z::Matrix, F::Matrix, θ, N::Integer, S::Integer)
+    head_ries_index(Z::Matrix, F::Matrix, θ, N::Integer, S::Integer)
 
-The function computes bilateral trade costs according to Head-Reis, i.e. symmetric inter country-industry trade costs and 
+The function computes bilateral trade costs according to Head-Ries, i.e. symmetric inter country-industry trade costs and 
     zero intra country trade costs. Trade costs are computed for both intermediate input and final demand. The trade elasticity can 
     take the form of a uniform country-industry value or origin country-industry trade elasticity.
 
@@ -26,11 +26,11 @@ The function computes bilateral trade costs according to Head-Reis, i.e. symmetr
 
 # Examples
 ```julia-repl
-julia> τ_HR_Z, τ_HR_F = head_reis_index(Z, F, θ, N, S)
+julia> τ_HR_Z, τ_HR_F = head_ries_index(Z, F, θ, N, S)
 ```
 """
 
-function head_reis_index(Z::Matrix, F::Matrix, θ, N::Integer, S::Integer)
+function head_ries_index(Z::Matrix, F::Matrix, θ, N::Integer, S::Integer)
 
     if length(θ) == 1
         θ = fill(θ, N*S) # NS×1, work with country-industry elasticities
