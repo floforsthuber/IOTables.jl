@@ -4,7 +4,7 @@
 
 using DataFrames, RData,  XLSX, LinearAlgebra, Statistics
 
-include("transform_data.jl") # Script with functions to import and transform raw data
+include("transform_data2.jl") # Script with functions to import and transform raw data
 include("price_hat.jl") # Script with function to obtain the price index
 include("wage_hat.jl") # Script with function to obtain the wages and gross output
 
@@ -38,7 +38,8 @@ max_error = 1e7
 w_hat = ones(N) # N×1
 
 # # adjust trade balance, (if active => adjustments such that there is no trade deficit, i.e. counterfactual in itself)
-# TB_ctry .= 0.0
+TB_ctry_prime = copy(TB_ctry)
+# TB_ctry_prime .= 0.0
 
 
 while max_error > tolerance && iteration <= max_iteration
@@ -56,7 +57,7 @@ while max_error > tolerance && iteration <= max_iteration
     # Labor market clearing
     w_hat_prev = copy(w_hat) # store last wage in case new optimization obtains negative wages
 
-    w_hat, Y_prime, Z_prime, F_prime, ETB_ctry = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
+    w_hat, Y_prime, Z_prime, F_prime, ETB_ctry = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry_prime, γ, α)
 
     # update iteration parameters
     error = abs.(w_hat .- w_hat_prev)
@@ -73,6 +74,7 @@ while max_error > tolerance && iteration <= max_iteration
 
 end
 
+w_hat
 
 # Country consumer price index and real wage
 P0_F_ctry = (ones(S,N) ./ α).^α # S×N

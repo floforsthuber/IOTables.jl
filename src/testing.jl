@@ -4,7 +4,7 @@
 
 using DataFrames, RData,  XLSX, LinearAlgebra, Statistics
 
-include("transform_data.jl") # Script with functions to import and transform raw data
+include("transform_data2.jl") # Script with functions to import and transform raw data
 include("price_hat.jl") # Script with function to obtain the price index
 include("wage_hat.jl") # Script with function to obtain the wages and gross output
 include("tariffs_function.jl") # Script with functions to create τ_hat_Z, τ_hat_F from tariff data
@@ -43,6 +43,13 @@ w_hat = ones(N) # N×1
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+ctry_names_2016 = ["AUS", "AUT", "BEL", "BGR", "BRA", "CAN", "CHE", "CHN", "CYP", "CZE", "DEU", "DNK", "ESP", "EST", "FIN", "FRA", 
+    "GBR", "GRC", "HRV", "HUN", "IDN", "IND", "IRL", "ITA", "JPN", "KOR", "LTU", "LUX", "LVA", "MEX", "MLT", "NLD", "NOR", "POL", 
+    "PRT", "ROU", "RUS", "SVK", "SVN", "SWE", "TUR", "TWN", "USA"]
+ctry_names_2016 = [ctry_names_2016; "ZoW"] # use "ZoW" instead of "RoW" so we can sort later on
+
+
+
 
 # countries present in WIOD
 ctry_names_2013 = ["AUS", "AUT", "BEL", "BGR", "BRA", "CAN", "CHN", "CYP", "CZE", "DEU", "DNK", "ESP", "EST", "FIN", "FRA", "GBR", 
@@ -52,10 +59,6 @@ ctry_names_2013 = [ctry_names_2013; "ZoW"] # use "ZoW" instead of "RoW" so we ca
 
 industries = lpad.(1:S, 2, '0') # left pad with leading zeros so we can sort later on
 
-ctry_names_2016 = ["AUS", "AUT", "BEL", "BGR", "BRA", "CAN", "CHE", "CHN", "CYP", "CZE", "DEU", "DNK", "ESP", "EST", "FIN", "FRA", 
-    "GBR", "GRC", "HRV", "HUN", "IDN", "IND", "IRL", "ITA", "JPN", "KOR", "LTU", "LUX", "LVA", "MEX", "MLT", "NLD", "NOR", "POL", 
-    "PRT", "ROU", "RUS", "SVK", "SVN", "SWE", "TUR", "TWN", "USA"]
-ctry_names_2016 = [ctry_names_2016; "ZoW"] # use "ZoW" instead of "RoW" so we can sort later on
 
 ctry_EU27 = ["AUT", "BEL", "BGR", "HRV", "CYP", "CZE", "DNK", "EST", "FIN", "FRA", "DEU", "GRC", "HUN", "IRL", "ITA", "LVA", 
     "LTU", "LUX", "MLT", "NLD", "POL", "PRT", "ROU", "SVK", "SVN", "ESP", "SWE"]
