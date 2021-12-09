@@ -159,10 +159,11 @@ end
 
 
 """
-    create_trade_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, S::Integer)
+    create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, S::Integer)
 
-The function computes the origin country-industry destination country intermediate goods trade share matrix π_Z and 
+The function computes the origin country-industry destination country-industry intermediate goods expenditure (trade) share matrix π_Z and 
     origin country-industry destination country final goods trade share matrix π_F.
+For example π_Z[i,j] = 0.2 means that the country-sector pair j sources 20% of its inputs from the country-sector pair i.
 
 # Arguments
 - `Z::Matrix`: NS×NS, origin country-industry destination country-industry intermediate demand matrix Z.
@@ -176,11 +177,11 @@ The function computes the origin country-industry destination country intermedia
 
 # Examples
 ```julia-repl
-julia> π_Z, π_F = create_trade_shares(Z, F, N, S)
+julia> π_Z, π_F = create_expenditure_shares(Z, F, N, S)
 ```
 """
 
-function create_trade_shares(Z::Matrix, F::Matrix, N::Integer, S::Integer)
+function create_expenditure_shares(Z::Matrix, F::Matrix, N::Integer, S::Integer)
 
     Z_agg = [sum(Z[s:S:(N-1)*S+s,j]) for s in 1:S, j in 1:N*S] # S×NS, sum over origin industries
     π_Z = Z ./ repeat(Z_agg, N) # NS×NS
@@ -200,11 +201,14 @@ end
 
 
 """
-    create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, S::Integer)
+    create_input_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, S::Integer)
 
 The function computes the country value added vector VA_ctry respecting inventory adjustments, intermediate goods expenditure share matrix γ 
     and final goods import expenditure share matrix α. Additionally, country-industry value added coeffiecient matrix VA_coeff as well as 
     country trade balance vector TB_ctry and country final goods import vector F_ctry are produced.
+For example if α[s,i] = 0.2 means that country i sources 20% of its final demand from sector s.
+For example if VA_coeff[s,i] = 0.2 means that 20% of output in country-industry pair [i,s] was value added.
+For example if γ[s,j] = 0.2 means that 20% of inputs in country-industry pair j was sourced from sector s.
 
 # Arguments
 - `Z::Matrix`: NS×NS, origin country-industry destination country-industry intermediate demand matrix Z.
@@ -226,11 +230,11 @@ The function computes the country value added vector VA_ctry respecting inventor
 
 # Examples
 ```julia-repl
-julia> γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, π_Z, π_F, VA, N, S)
+julia> γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_input_shares(Z, F, Y, π_Z, π_F, VA, N, S)
 ```
 """
 
-function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, π_Z::Matrix, π_F::Matrix, N::Integer, S::Integer)
+function create_input_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, π_Z::Matrix, π_F::Matrix, N::Integer, S::Integer)
 
     # Country-industry level intermediate import expenditure shares
     Z_agg = [sum(Z[i:S:(N-1)*S+i, j]) for i in 1:S, j in 1:N*S] # S×NS, sum over origin industries
@@ -314,8 +318,8 @@ function transform_data(dir::String, revision::String, year::Integer, N::Integer
 
     Z, F, IV = import_data(dir, revision, year, N, S)
     Z, F, Y, VA = inventory_adjustment(Z, F, IV, N, S)
-    π_Z, π_F = create_trade_shares(Z, F, N, S)
-    γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, VA, π_Z, π_F, N, S)
+    π_Z, π_F = create_expenditure_shares(Z, F, N, S)
+    γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_input_shares(Z, F, Y, VA, π_Z, π_F, N, S)
 
     println(" ✓ Corresponding transformations from WIOD (rev. $revision) for $year were successfully computed! \n")
 
