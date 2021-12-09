@@ -185,12 +185,12 @@ function create_trade_shares(Z::Matrix, F::Matrix, N::Integer, S::Integer)
     Z_agg = [sum(Z[s:S:(N-1)*S+s,j]) for s in 1:S, j in 1:N*S] # S×NS, sum over origin industries
     π_Z = Z ./ repeat(Z_agg, N) # NS×NS
     π_Z = ifelse.(isnan.(π_Z), 0.0, π_Z) # needed in case Z_agg = 0 (highly unlikely  since all entries in Z >= 0)
-    !any(0.0 .<= π_Z .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
+    !any(0.0 .<= π_Z .<= 1.0) && println(" × Problem! Not all elements in γ are in intervall [0, 1]")
     
     F_agg = [sum(F[s:S:(N-1)*S+s,j]) for s in 1:S, j in 1:N] # S×N, sum over origin industries
     π_F = F ./ repeat(F_agg, N) # NS×N
     π_F = ifelse.(isnan.(π_F), 0.0, π_F) # needed in case F_agg = 0 (highly unlikely since all entries in F >= 0)
-    !any(0.0 .<= π_Z .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
+    !any(0.0 .<= π_Z .<= 1.0) && println(" × Problem! Not all elements in γ are in intervall [0, 1]")
 
     return π_Z, π_F
 end
@@ -239,7 +239,7 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, 
 
     γ = γ_VA[1:S, 1:N*S] # S×NS
     γ = ifelse.(isnan.(γ), 0.0, γ) # needed in case Z_agg_VA = 0 (unlikely since all entries in Z, VA >= 0, but still necessary)
-    !any(0.0 .<= γ .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
+    !any(0.0 .<= γ .<= 1.0) && println(" × Problem! Not all elements in γ are in intervall [0, 1]")
 
     # Country-industry level value added coefficients
     VA_coeff = γ_VA[S+1, 1:N*S] # NS×1
@@ -255,7 +255,7 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, 
     # Country-industry final import expenditure shares (columns sum to 1)
     α = [sum(F[i:S:(N-1)*S+i, j])/F_ctry[j] for i in 1:S, j in 1:N] # S×N
     α = ifelse.(isnan.(α), 0.0, α) # needed in case F_ctry = 0 (unlikely since all entries in F >= 0, but still necessary)
-    !any(0.0 .<= α .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
+    !any(0.0 .<= α .<= 1.0) && println(" × Problem! Not all elements in γ are in intervall [0, 1]")
 
     # Country level trade balance (exports - imports)
     # need to calculate country level exports/imports (i.e. aggregate and remove intra-country trade)
