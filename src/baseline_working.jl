@@ -10,14 +10,28 @@ include("wage_hat.jl") # Script with function to obtain the wages and gross outp
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-years = 2000:2014 # vector with years covered by WIOD Rev. 2016
+dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data
+
+# Data specification
+
+# WIOD rev. 2013
+source = "WIOD"
+revision = "2013"
+year = 1995 # specified year
 N = 41 # number of countries 
 S = 35 # number of industries
-dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data
+
+# # WIOD rev. 2016
+# source = "WIOD"
+# revision = "2016"
+# year = 2014 # specified year
+# N = 44 # number of countries 
+# S = 56 # number of industries
+
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, "2013", 1995, N, S)
+Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, source, revision, year, N, S)
 
 # iteration parameters
 vfactor = 0.4

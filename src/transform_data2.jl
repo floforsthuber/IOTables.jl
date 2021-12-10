@@ -8,12 +8,13 @@
 """
     import_data(dir::String, revision::String, year::Integer, N::Integer, S::Integer)
 
-The function loads the WIOD Input-Output Table of specified year as DataFrame into the environment and 
-    extracts the raw intermediate, final demand matrices (Z, F) and the inventory adjustment matrix IV.
+The function loads the Input-Output Table sourced form the OECD or WIOD for a specified year as DataFrame into the environment and 
+    extracts the raw intermediate, final demand matrices (Z, F) and the inventory matrix IV.
 
 # Arguments
 - `dir::String`: directory of raw data (either folder location or entire directory).
-- `revision::String`: specifies the WIOD revision (2013 or 2016) as a string.
+- `source::String`: specifies the source of the IO table (OECD, WIOD) as a string.
+- `revision::String`: specifies the of the IO table as a string.
 - `year::Integer`: specifies the year of the WIOD table which should be imported.
 - `N::Integer`: number of origin/destination countries.
 - `S::Integer`: number of origin/destination industries.
@@ -29,34 +30,54 @@ julia> Z, F, IV = import_data("C:/Users/u0148308/Desktop/raw/", "2016", 2014, 44
 ```
 """
 
-function import_data(dir::String, revision::String, year::Integer, N::Integer, S::Integer)
+function import_data(dir::String, source::String, revision::String, year::Integer, N::Integer, S::Integer)
 
-    # switch between WIOD revisions (2016 uses R, 2013 uses Excel as input)
-    if revision == "2016"
-        file = "WIOT" * string(year) * "_October16_ROW.RData"
-        path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
+    if source == "OECD"
+        
+        if revision == "2021"
+            
+            file = "TiVA_2021/" * "ICIO2021econFD" * ".RData"
+            path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
 
-        df = RData.load(path)["wiot"]
-        df = df[1:N*S, 6:end-1] # NS×NS+5N, take out the rows/columns with country/industry names
+            df = RData.load(path)["ICIO2021econFD"]
 
-    else
-        name_2013 = ifelse(year >= 2008, "Sep", "Apr")
-        file = "WIOT" * string(year)[end-1:end] * "_ROW_" * name_2013 * "12.xlsx"
-        path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
+        else
+            println(" × This revision of OECD IO tables is not available!")
+        end
+
+    else source == "WIOD"
+
+        if revision == "2016"
+
+            file = "WIOD_2016/WIOT" * string(year) * "_October16_ROW.RData"
+            path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
     
-        df = DataFrames.DataFrame(XLSX.readxlsx(path)["WIOT_$year"][:], :auto)
-        df = df[7:end-8,5:end-1] # NS×NS+5N, take out the rows/columns with country/industry names
+            df = RData.load(path)["wiot"]
+            df = df[1:N*S, 6:end-1] # NS×NS+5N, take out the rows/columns with country/industry names
+        
+        elseif revision == "2013"
+
+            name_2013 = ifelse(year >= 2008, "Sep", "Apr")
+            file = "WIOD_2013/WIOT" * string(year)[end-1:end] * "_ROW_" * name_2013 * "12.xlsx"
+            path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
+        
+            df = DataFrames.DataFrame(XLSX.readxlsx(path)["WIOT_$year"][:], :auto)
+            df = df[7:end-8,5:end-1] # NS×NS+5N, take out the rows/columns with country/industry names
+
+        else
+            println(" × This revision of WIOD IO tables is not available!")
+        end
+
+        IO_table = Matrix(convert.(Float64, df)) # NS×NS+5N
+        inventory_columns = N*S+5:5:N*S+5*N
+        
+        Z = IO_table[:, 1:N*S] # NS×NS
+        F = IO_table[:, Not([1:N*S; inventory_columns])] # NS×4N
+        IV = IO_table[:, inventory_columns] # NS×N
+    
+        println(" ✓ Raw data from WIOD (rev. $revision) for $year was successfully imported!")
 
     end
-
-    IO_table = Matrix(convert.(Float64, df)) # NS×NS+5N
-    inventory_columns = N*S+5:5:N*S+5*N
-    
-    Z = IO_table[:, 1:N*S] # NS×NS
-    F = IO_table[:, Not([1:N*S; inventory_columns])] # NS×4N
-    IV = IO_table[:, inventory_columns] # NS×N
-
-    println(" ✓ Raw data from WIOD (rev. $revision) for $year was successfully imported!")
 
     return Z, F, IV
 end
@@ -289,7 +310,8 @@ The function imports and transforms the raw data for further use in the model.
 
 # Arguments
 - `dir::String`: directory of raw data (either folder location or entire directory).
-- `revision::String`: specifies the WIOD revision (2013 or 2016) as a string.
+- `source::String`: specifies the source of the IO table (OECD, WIOD) as a string.
+- `revision::String`: specifies the revision of the IO table as a string.
 - `year::Integer`: specifies the year of the WIOD table which should be imported.
 - `N::Integer`: number of origin/destination countries.
 - `S::Integer`: number of origin/destination industries.
@@ -314,9 +336,9 @@ julia> Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transfo
 
 """
 
-function transform_data(dir::String, revision::String, year::Integer, N::Integer, S::Integer)
+function transform_data(dir::String, source::String, revision::String, year::Integer, N::Integer, S::Integer)
 
-    Z, F, IV = import_data(dir, revision, year, N, S)
+    Z, F, IV = import_data(dir, source, revision, year, N, S)
     Z, F, Y, VA = inventory_adjustment(Z, F, IV, N, S)
     π_Z, π_F = create_expenditure_shares(Z, F, N, S)
     γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_input_shares(Z, F, Y, VA, π_Z, π_F, N, S)
