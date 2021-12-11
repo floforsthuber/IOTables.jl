@@ -12,21 +12,40 @@ include("head_ries_index.jl") # Script with functions to create bilateral Head-R
 include("elasticities_functions.jl") # Script with functions to compute statistics for estimating sectoral trade elasticities (method of Caliendo and Parro, 2015)
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-years = 2000:2014 # vector with years covered by WIOD Rev. 2016
+dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data
+
+# Data specification
+
+# WIOD rev. 2013
+source = "WIOD"
+revision = "2013"
+year = 1995 # specified year
 N = 41 # number of countries 
 S = 35 # number of industries
-dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data
+
+# # WIOD rev. 2016
+# source = "WIOD"
+# revision = "2016"
+# year = 2014 # specified year
+# N = 44 # number of countries 
+# S = 56 # number of industries
+
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, "2013", 1995, N, S)
+Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, source, revision, year, N, S)
 
 # -------
 
 # use random tariff matrix for now (tariffs between 0 and 20 percent)
-τ_Z = 1 .+ rand(0.0:0.01:0.2, N*S, N*S) # NS×N
-τ_F = 1 .+ rand(0.0:0.01:0.2, N*S, N*S) # NS×N
+# τ_Z = 1 .+ rand(0.0:0.01:0.2, N*S, N*S) # NS×N
+# τ_F = 1 .+ rand(0.0:0.01:0.2, N*S, N*S) # NS×N
 
+df_tariffs = DataFrame(XLSX.readtable(dir * "MFN/tariff_matrix.xlsx", "Sheet1")...)
+τ_Z = Matrix(convert.(Float64, df_tariffs[:,2:end]))
+τ_Z = 1 .+ τ_Z ./ 100
+
+τ_F = copy(τ_Z)
 
 lhs_Z, rhs_Z, lhs_F, rhs_F = elasticity_data(Z, F, τ_Z, τ_F, N, S)
 

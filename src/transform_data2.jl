@@ -36,7 +36,7 @@ function import_data(dir::String, source::String, revision::String, year::Intege
         
         if revision == "2021"
             
-            file = "TiVA_2021/" * "ICIO2021econFD" * ".RData"
+            file = source * "/" * revision * "/ICIO2021econFD" * ".RData"
             path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
 
             df = RData.load(path)["ICIO2021econFD"]
@@ -49,7 +49,7 @@ function import_data(dir::String, source::String, revision::String, year::Intege
 
         if revision == "2016"
 
-            file = "WIOD_2016/WIOT" * string(year) * "_October16_ROW.RData"
+            file = source * "/" * revision * "/WIOT" * string(year) * "_October16_ROW.RData"
             path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
     
             df = RData.load(path)["wiot"]
@@ -58,7 +58,7 @@ function import_data(dir::String, source::String, revision::String, year::Intege
         elseif revision == "2013"
 
             name_2013 = ifelse(year >= 2008, "Sep", "Apr")
-            file = "WIOD_2013/WIOT" * string(year)[end-1:end] * "_ROW_" * name_2013 * "12.xlsx"
+            file = source * "/" * revision * "/WIOT" * string(year)[end-1:end] * "_ROW_" * name_2013 * "12.xlsx"
             path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
         
             df = DataFrames.DataFrame(XLSX.readxlsx(path)["WIOT_$year"][:], :auto)

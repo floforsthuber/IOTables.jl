@@ -95,7 +95,13 @@ function elasticity_data(Z::Matrix, F::Matrix, τ_Z::Matrix, τ_F::Matrix, N::In
 
     # reduce intermediate demand to origin country-industry destination country
     X = [sum(Z[i,j:j+S-1]) for i in 1:N*S, j in 1:S:N*S] # NS×N
-    τ_X = [mean(τ_Z[i,j:j+S-1]) for i in 1:N*S, j in 1:S:N*S] # NS×N
+    #X = X .+ F
+
+    if size(τ_Z, 2) == N*S
+        τ_X = [mean(τ_Z[i,j:j+S-1]) for i in 1:N*S, j in 1:S:N*S] # NS×N
+    else
+        τ_X = τ_Z
+    end
 
     # initialize loop
     lhs_Z = Float64[]
@@ -112,7 +118,7 @@ function elasticity_data(Z::Matrix, F::Matrix, τ_Z::Matrix, τ_F::Matrix, N::In
         F_temp = F[j:S:(N-1)*S+j, :] # S×N
         τ_F_temp = τ_F[j:S:(N-1)*S+j, :] # S×N
     
-        lhs_Z_temp, rhs_Z_temp, lhs_F_temp, rhs_F_temp = create_reg_data(X_temp, F_temp, τ_X_temp, τ_F_temp)
+        lhs_Z_temp, rhs_Z_temp, lhs_F_temp, rhs_F_temp = CP_statistic(X_temp, F_temp, τ_X_temp, τ_F_temp, N, S)
 
         lhs_Z = [lhs_Z; lhs_Z_temp]
         rhs_Z = [rhs_Z; rhs_Z_temp]
