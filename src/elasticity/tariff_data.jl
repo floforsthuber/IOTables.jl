@@ -4,12 +4,13 @@
 
 using DataFrames, RData,  XLSX, LinearAlgebra, Statistics, CSV
 
-include("transform_data2.jl") # Script with functions to import and transform raw data
-include("price_hat.jl") # Script with function to obtain the price index
-include("wage_hat.jl") # Script with function to obtain the wages and gross output
-include("tariffs_function.jl") # Script with functions to create τ_hat_Z, τ_hat_F from tariff data
-include("head_ries_index.jl") # Script with functions to create bilateral Head-Ries index (symmetric bilateral trade costs)
-include("elasticities_functions.jl") # Script with functions to compute statistics for estimating sectoral trade elasticities (method of Caliendo and Parro, 2015)
+include("model/transform_data.jl") # Script with functions to import and transform raw data
+include("model/price_hat.jl") # Script with function to obtain the price index
+include("model/wage_hat.jl") # Script with function to obtain the wages and gross output
+include("counterfactual/tariffs_function.jl") # Script with functions to create τ_hat_Z, τ_hat_F from tariff data
+include("counterfactual/head_ries_index.jl") # Script with functions to create bilateral Head-Ries index (symmetric bilateral trade costs)
+include("elasticity/elasticities_functions.jl") # Script with functions to compute statistics for estimating sectoral trade elasticities (method of Caliendo and Parro, 2015)
+
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data

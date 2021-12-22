@@ -3,27 +3,18 @@
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-path = "C:/Users/u0148308/Desktop/TiVA_2021/" * "ICIO2021econFD.RData"
-
-df = RData.load(path)
-
-
-df = df["ICIO2021econFD"]
-
-df[1,:,:]
-df[24,:,:]
-
 # --------------- Raw data ---------------------------------------------------------------------------------------------------------------------------------
 
 """
     import_data(dir::String, revision::String, year::Integer, N::Integer, S::Integer)
 
-The function loads the WIOD Input-Output Table of specified year as DataFrame into the environment and 
-    extracts the raw intermediate, final demand matrices (Z, F) and the inventory adjustment matrix IV.
+The function loads the Input-Output Table sourced form the OECD or WIOD for a specified year as DataFrame into the environment and 
+    extracts the raw intermediate, final demand matrices (Z, F) and the inventory matrix IV.
 
 # Arguments
 - `dir::String`: directory of raw data (either folder location or entire directory).
-- `revision::String`: specifies the WIOD revision (2013 or 2016) as a string.
+- `source::String`: specifies the source of the IO table (OECD, WIOD) as a string.
+- `revision::String`: specifies the of the IO table as a string.
 - `year::Integer`: specifies the year of the WIOD table which should be imported.
 - `N::Integer`: number of origin/destination countries.
 - `S::Integer`: number of origin/destination industries.
@@ -39,34 +30,54 @@ julia> Z, F, IV = import_data("C:/Users/u0148308/Desktop/raw/", "2016", 2014, 44
 ```
 """
 
-function import_data(dir::String, revision::String, year::Integer, N::Integer, S::Integer)
+function import_data(dir::String, source::String, revision::String, year::Integer, N::Integer, S::Integer)
 
-    # switch between WIOD revisions (2016 uses R, 2013 uses Excel as input)
-    if revision == "2016"
-        file = "WIOT" * string(year) * "_October16_ROW.RData"
-        path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
+    if source == "OECD"
+        
+        if revision == "2021"
+            
+            file = source * "/" * revision * "/ICIO2021econFD" * ".RData"
+            path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
 
-        df = RData.load(path)["wiot"]
-        df = df[1:N*S, 6:end-1] # NS×NS+5N, take out the rows/columns with country/industry names
+            df = RData.load(path)["ICIO2021econFD"]
 
-    else
-        name_2013 = ifelse(year >= 2008, "Sep", "Apr")
-        file = "WIOT" * string(year)[end-1:end] * "_ROW_" * name_2013 * "12.xlsx"
-        path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
+        else
+            println(" × This revision of OECD IO tables is not available!")
+        end
+
+    else source == "WIOD"
+
+        if revision == "2016"
+
+            file = source * "/" * revision * "/WIOT" * string(year) * "_October16_ROW.RData"
+            path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
     
-        df = DataFrames.DataFrame(XLSX.readxlsx(path)["WIOT_$year"][:], :auto)
-        df = df[7:end-8,5:end-1] # NS×NS+5N, take out the rows/columns with country/industry names
+            df = RData.load(path)["wiot"]
+            df = df[1:N*S, 6:end-1] # NS×NS+5N, take out the rows/columns with country/industry names
+        
+        elseif revision == "2013"
+
+            name_2013 = ifelse(year >= 2008, "Sep", "Apr")
+            file = source * "/" * revision * "/WIOT" * string(year)[end-1:end] * "_ROW_" * name_2013 * "12.xlsx"
+            path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
+        
+            df = DataFrames.DataFrame(XLSX.readxlsx(path)["WIOT_$year"][:], :auto)
+            df = df[7:end-8,5:end-1] # NS×NS+5N, take out the rows/columns with country/industry names
+
+        else
+            println(" × This revision of WIOD IO tables is not available!")
+        end
+
+        IO_table = Matrix(convert.(Float64, df)) # NS×NS+5N
+        inventory_columns = N*S+5:5:N*S+5*N
+        
+        Z = IO_table[:, 1:N*S] # NS×NS
+        F = IO_table[:, Not([1:N*S; inventory_columns])] # NS×4N
+        IV = IO_table[:, inventory_columns] # NS×N
+    
+        println(" ✓ Raw data from WIOD (rev. $revision) for $year was successfully imported!")
 
     end
-
-    IO_table = Matrix(convert.(Float64, df)) # NS×NS+5N
-    inventory_columns = N*S+5:5:N*S+5*N
-    
-    Z = IO_table[:, 1:N*S] # NS×NS
-    F = IO_table[:, Not([1:N*S; inventory_columns])] # NS×4N
-    IV = IO_table[:, inventory_columns] # NS×N
-
-    println("Raw data from WIOD (rev. $revision) for $year was successfully imported!")
 
     return Z, F, IV
 end
@@ -110,7 +121,7 @@ function inventory_adjustment(Z::Matrix, F::Matrix, IV::Matrix, N::Integer, S::I
     # Inventory adjustment (spread IV regardless of origin over all columns)
     IV = [sum(IV[i,:]) for i in 1:N*S] # NS×1, negative values possible
     Y = [sum(Z[i,:]) + sum(F[i,:]) + IV[i] for i in 1:N*S] # NS×1, possibly negative if IV is negative enough
-    Y = ifelse.(Y .< 0.0, 0.0, Y) # exclude negative values
+    Y = ifelse.(Y .< 0.0, 0.0, Y) # exclude negative values 
 
     adjustment = Y .- IV # NS×1
     adjustment = ifelse.(adjustment .< 0.0, 0.0, adjustment) # in case negative, as in Antras and Chor (2018)
@@ -131,8 +142,36 @@ function inventory_adjustment(Z::Matrix, F::Matrix, IV::Matrix, N::Integer, S::I
     Y = [sum(Z[i,:]) + sum(F[i,:]) for i in 1:N*S] # NS×1
 
     VA = [Y[i] - sum(Z[:,i]) for i in 1:N*S] # NS×1, compute value added (gross output minus sum of inputs)
-    VA = ifelse.(VA .< 0.0, 0.0, VA) # in case one is negative (actually problematic since Z, F, Y internally consistent but not VA)
+    #VA = ifelse.(VA .< 0.0, 0.0, VA) # in case one is negative (actually problematic since Z, F, Y internally consistent but not VA)
 
+    # -------------
+
+    # adjust Z for negative VA values in order to have internal consistency, i.e. Y_exports == Y_imports+VA 
+    adjustment = ifelse.(VA .< 0.0, VA, 0.0) # spread only negative values
+    adjustment = Y .- adjustment
+    adjustment = ifelse.(adjustment .< 0.0, 0.0, adjustment)
+    adjustment = Y ./ adjustment
+
+    Z = Z .* repeat(transpose(adjustment), N*S) # NS×NS, inventory adjustment
+    Z = ifelse.(isnan.(Z), 0.0, Z)
+    Z = ifelse.(isinf.(Z), 0.0, Z)
+    Z = ifelse.(Z .< 0.0, 0.0, Z) # NS×NS
+
+    # rebuild everything
+    Y = [sum(Z[i,:]) + sum(F[i,:]) for i in 1:N*S] # NS×1
+    VA = [Y[i] - sum(Z[:,i]) for i in 1:N*S] # NS×1, should now be without any negative values
+
+    # calculating gross output via exports/imports+VA should give the same results
+    # still not exactly the same! but all differences <1e10
+    Y_imports = [sum(Z[:,j]) + VA[j] for j in 1:N*S]
+    
+    if Y ≈ Y_imports
+        println(" ✓ The matrices are internally consistent!")
+    else
+        println(" × Failure! The matrices are internally inconsistent!")
+    end
+
+    
     return Z, F, Y, VA
 end
 
@@ -141,10 +180,11 @@ end
 
 
 """
-    create_trade_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, S::Integer)
+    create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, S::Integer)
 
-The function computes the origin country-industry destination country intermediate goods trade share matrix π_Z and 
+The function computes the origin country-industry destination country-industry intermediate goods expenditure (trade) share matrix π_Z and 
     origin country-industry destination country final goods trade share matrix π_F.
+For example π_Z[i,j] = 0.2 means that the country-sector pair j sources 20% of its inputs from the country-sector pair i.
 
 # Arguments
 - `Z::Matrix`: NS×NS, origin country-industry destination country-industry intermediate demand matrix Z.
@@ -158,21 +198,21 @@ The function computes the origin country-industry destination country intermedia
 
 # Examples
 ```julia-repl
-julia> π_Z, π_F = create_trade_shares(Z, F, N, S)
+julia> π_Z, π_F = create_expenditure_shares(Z, F, N, S)
 ```
 """
 
-function create_trade_shares(Z::Matrix, F::Matrix, N::Integer, S::Integer)
+function create_expenditure_shares(Z::Matrix, F::Matrix, N::Integer, S::Integer)
 
     Z_agg = [sum(Z[s:S:(N-1)*S+s,j]) for s in 1:S, j in 1:N*S] # S×NS, sum over origin industries
     π_Z = Z ./ repeat(Z_agg, N) # NS×NS
     π_Z = ifelse.(isnan.(π_Z), 0.0, π_Z) # needed in case Z_agg = 0 (highly unlikely  since all entries in Z >= 0)
-    !any(0.0 .<= π_Z .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
+    !any(0.0 .<= π_Z .<= 1.0) && println(" × Problem! Not all elements in γ are in intervall [0, 1]")
     
     F_agg = [sum(F[s:S:(N-1)*S+s,j]) for s in 1:S, j in 1:N] # S×N, sum over origin industries
     π_F = F ./ repeat(F_agg, N) # NS×N
     π_F = ifelse.(isnan.(π_F), 0.0, π_F) # needed in case F_agg = 0 (highly unlikely since all entries in F >= 0)
-    !any(0.0 .<= π_Z .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
+    !any(0.0 .<= π_Z .<= 1.0) && println(" × Problem! Not all elements in γ are in intervall [0, 1]")
 
     return π_Z, π_F
 end
@@ -182,11 +222,14 @@ end
 
 
 """
-    create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, S::Integer)
+    create_input_shares(Z::Matrix, F::Matrix, Y::Vector, N::Integer, S::Integer)
 
 The function computes the country value added vector VA_ctry respecting inventory adjustments, intermediate goods expenditure share matrix γ 
     and final goods import expenditure share matrix α. Additionally, country-industry value added coeffiecient matrix VA_coeff as well as 
     country trade balance vector TB_ctry and country final goods import vector F_ctry are produced.
+For example if α[s,i] = 0.2 means that country i sources 20% of its final demand from sector s.
+For example if VA_coeff[s,i] = 0.2 means that 20% of output in country-industry pair [i,s] was value added.
+For example if γ[s,j] = 0.2 means that 20% of inputs in country-industry pair j was sourced from sector s.
 
 # Arguments
 - `Z::Matrix`: NS×NS, origin country-industry destination country-industry intermediate demand matrix Z.
@@ -208,11 +251,11 @@ The function computes the country value added vector VA_ctry respecting inventor
 
 # Examples
 ```julia-repl
-julia> γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, π_Z, π_F, VA, N, S)
+julia> γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_input_shares(Z, F, Y, π_Z, π_F, VA, N, S)
 ```
 """
 
-function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, π_Z::Matrix, π_F::Matrix, N::Integer, S::Integer)
+function create_input_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, π_Z::Matrix, π_F::Matrix, N::Integer, S::Integer)
 
     # Country-industry level intermediate import expenditure shares
     Z_agg = [sum(Z[i:S:(N-1)*S+i, j]) for i in 1:S, j in 1:N*S] # S×NS, sum over origin industries
@@ -221,7 +264,7 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, 
 
     γ = γ_VA[1:S, 1:N*S] # S×NS
     γ = ifelse.(isnan.(γ), 0.0, γ) # needed in case Z_agg_VA = 0 (unlikely since all entries in Z, VA >= 0, but still necessary)
-    !any(0.0 .<= γ .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
+    !any(0.0 .<= γ .<= 1.0) && println(" × Problem! Not all elements in γ are in intervall [0, 1]")
 
     # Country-industry level value added coefficients
     VA_coeff = γ_VA[S+1, 1:N*S] # NS×1
@@ -237,7 +280,7 @@ function create_expenditure_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, 
     # Country-industry final import expenditure shares (columns sum to 1)
     α = [sum(F[i:S:(N-1)*S+i, j])/F_ctry[j] for i in 1:S, j in 1:N] # S×N
     α = ifelse.(isnan.(α), 0.0, α) # needed in case F_ctry = 0 (unlikely since all entries in F >= 0, but still necessary)
-    !any(0.0 .<= α .<= 1.0) && println("Problem: not all elements in γ are in intervall [0, 1]")
+    !any(0.0 .<= α .<= 1.0) && println(" × Problem! Not all elements in γ are in intervall [0, 1]")
 
     # Country level trade balance (exports - imports)
     # need to calculate country level exports/imports (i.e. aggregate and remove intra-country trade)
@@ -267,7 +310,8 @@ The function imports and transforms the raw data for further use in the model.
 
 # Arguments
 - `dir::String`: directory of raw data (either folder location or entire directory).
-- `revision::String`: specifies the WIOD revision (2013 or 2016) as a string.
+- `source::String`: specifies the source of the IO table (OECD, WIOD) as a string.
+- `revision::String`: specifies the revision of the IO table as a string.
 - `year::Integer`: specifies the year of the WIOD table which should be imported.
 - `N::Integer`: number of origin/destination countries.
 - `S::Integer`: number of origin/destination industries.
@@ -292,14 +336,14 @@ julia> Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transfo
 
 """
 
-function transform_data(dir::String, revision::String, year::Integer, N::Integer, S::Integer)
+function transform_data(dir::String, source::String, revision::String, year::Integer, N::Integer, S::Integer)
 
-    Z, F, IV = import_data(dir, revision, year, N, S)
+    Z, F, IV = import_data(dir, source, revision, year, N, S)
     Z, F, Y, VA = inventory_adjustment(Z, F, IV, N, S)
-    π_Z, π_F = create_trade_shares(Z, F, N, S)
-    γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_expenditure_shares(Z, F, Y, VA, π_Z, π_F, N, S)
+    π_Z, π_F = create_expenditure_shares(Z, F, N, S)
+    γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_input_shares(Z, F, Y, VA, π_Z, π_F, N, S)
 
-    println("Corresponding transformations from WIOD (rev. $revision) for $year were successfully computed!")
+    println(" ✓ Corresponding transformations from WIOD (rev. $revision) for $year were successfully computed! \n")
 
     return Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F
 end

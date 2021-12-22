@@ -4,9 +4,10 @@
 
 using DataFrames, RData,  XLSX, LinearAlgebra, Statistics
 
-include("transform_data2.jl") # Script with functions to import and transform raw data
-include("price_hat.jl") # Script with function to obtain the price index
-include("wage_hat.jl") # Script with function to obtain the wages and gross output
+dir = "X:/VIVES/1-Personal/Florian/git/IOTables/src/"
+include(dir * "model/transform_data.jl") # Script with functions to import and transform raw data
+include(dir * "model/price_hat.jl") # Script with function to obtain the price index
+include(dir * "model/wage_hat.jl") # Script with function to obtain the wages and gross output
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 

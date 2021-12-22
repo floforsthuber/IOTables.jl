@@ -2,6 +2,18 @@
 # Script with functions to import and transform raw data
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+using DataFrames, RData,  XLSX, LinearAlgebra, Statistics, CSV
+
+
+path = "C:/Users/u0148308/Desktop/TiVA_2021/" * "ICIO2021econFD.RData"
+
+df = RData.load(path)
+
+
+df = df["ICIO2021econFD"]
+
+df[1,:,:]
+df[24,:,:]
 
 # --------------- Raw data ---------------------------------------------------------------------------------------------------------------------------------
 
@@ -152,7 +164,7 @@ function inventory_adjustment(Z::Matrix, F::Matrix, IV::Matrix, N::Integer, S::I
     adjustment = ifelse.(adjustment .< 0.0, 0.0, adjustment)
     adjustment = Y ./ adjustment
 
-    Z = Z .* repeat(adjustment', N*S) # NS×NS, inventory adjustment
+    Z = Z .* repeat(transpose(adjustment), N*S) # NS×NS, inventory adjustment
     Z = ifelse.(isnan.(Z), 0.0, Z)
     Z = ifelse.(isinf.(Z), 0.0, Z)
     Z = ifelse.(Z .< 0.0, 0.0, Z) # NS×NS
