@@ -18,7 +18,7 @@ A brief overview about the script and their functions in this repository.
 ## counterfactual
 
 - **tariffs_functions.jl:** transforms EU MFN tariffs to be used as counterfactual in exit of EU scenario
-- **head_ries_index.jl:** computes symmetric bilateral trade costs according to Head and Ries (2001
+- **head_ries_index.jl:** computes symmetric bilateral trade costs according to Head and Ries (2001)
 
 ## elasticity
 

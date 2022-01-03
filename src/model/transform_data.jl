@@ -36,13 +36,22 @@ function import_data(dir::String, source::String, revision::String, year::Intege
         
         if revision == "2021"
             
-            file = source * "/" * revision * "/ICIO2021econFD" * ".RData"
+            file = source * "/" * revision * "/"
             path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
 
-            df = RData.load(path)["ICIO2021econFD"]
+            time = 1995:2018
+            index = findfirst(time .== year) # get index of specified year
+
+            Z = RData.load(path * "ICIO2021econCONS" * ".RData")["ICIO2021econCONS"][index,:,:] # replace with proper file, could not access OECD website?
+            F = RData.load(path * "ICIO2021econFD" * ".RData")["ICIO2021econFD"][index,:,:] # total final demand (with inventory)
+            IV = RData.load(path * "ICIO2021econINVNT" * ".RData")["ICIO2021econINVNT"][index,:,:]
+
+            F = F .- IV # take out inventory from final demand
+
+            println(" ✓ Raw data from $source (rev. $revision) for $year was successfully imported!")
 
         else
-            println(" × This revision of OECD IO tables is not available!")
+            println(" × The revision - $revision - of $source IO tables is not available!")
         end
 
     else source == "WIOD"
@@ -65,7 +74,7 @@ function import_data(dir::String, source::String, revision::String, year::Intege
             df = df[7:end-8,5:end-1] # NS×NS+5N, take out the rows/columns with country/industry names
 
         else
-            println(" × This revision of WIOD IO tables is not available!")
+            println(" × The revision - $revision - of $source IO tables is not available!")
         end
 
         IO_table = Matrix(convert.(Float64, df)) # NS×NS+5N
@@ -75,7 +84,7 @@ function import_data(dir::String, source::String, revision::String, year::Intege
         F = IO_table[:, Not([1:N*S; inventory_columns])] # NS×4N
         IV = IO_table[:, inventory_columns] # NS×N
     
-        println(" ✓ Raw data from WIOD (rev. $revision) for $year was successfully imported!")
+        println(" ✓ Raw data from $source (rev. $revision) for $year was successfully imported!")
 
     end
 
