@@ -2,15 +2,12 @@
 # Script to estimate Caliendo and Parro (2015) trade elasticities
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-using DataFrames, RData,  XLSX, LinearAlgebra, Statistics, CSV
+using DataFrames, RData, XLSX, LinearAlgebra, Statistics, CSV
 
 dir = "X:/VIVES/1-Personal/Florian/git/IOTables/src/"
 include(dir * "model/transform_data.jl") # Script with functions to import and transform raw data
-include(dir * "model/price_hat.jl") # Script with function to obtain the price index
-include(dir * "model/wage_hat.jl") # Script with function to obtain the wages and gross output
-include(dir * "counterfactual/tariffs_function.jl") # Script with functions to create τ_hat_Z, τ_hat_F from tariff data
-include(dir * "counterfactual/head_ries_index.jl") # Script with functions to create bilateral Head-Ries index (symmetric bilateral trade costs)
 include(dir * "elasticity/elasticities_functions.jl") # Script with functions to compute statistics for estimating sectoral trade elasticities (method of Caliendo and Parro, 2015)
+# include(dir * "elasticity/wto_tariffs_2018.jl") # Script to prepare WTO tariff data from 2018
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -32,36 +29,26 @@ S = 35 # number of industries
 # N = 44 # number of countries 
 # S = 56 # number of industries
 
-
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, source, revision, year, N, S)
-M = copy(transpose(Z))
-
 
 # -------
 
 df_tariffs = DataFrame(XLSX.readtable(dir * "WTO/tariff_matrix.xlsx", "Sheet1")...)
-τ_Z = Matrix(convert.(Float64, df_tariffs[:,2:end]))
-τ_Z = 1.0 .+ τ_Z ./ 100
-τ_F = copy(τ_Z)
-
-
-# # use random tariff matrix for now
-# τ_Z = 1 .+ rand(0.0:0.01:0.1, N*S, N*S) # NS×N
-# τ_F = 1 .+ rand(0.0:0.01:0.1, N*S, N*S) # NS×N
+τ_Z = Matrix(convert.(Float64, df_tariffs[:,2:end])) # NS×N
+τ_Z = 1.0 .+ τ_Z ./ 100 # NS×N
 
 # -------
 
-
-
-lhs_Z, rhs_Z = elasticity_data(Z, τ_Z, "intermediate", N, S)
-lhs_F, rhs_F = elasticity_data(F, τ_F, "final", N, S)
+# CP statistic is computed using absorption (X), i.e. imports not exports
+# therefore, we use the transpose of Z, so we have destination as rows and origin as columns as in τ_Z
+M = copy(transpose(Z))
 
 lhs_Z, rhs_Z = elasticity_data(M, τ_Z, "intermediate", N, S)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
-# export with fixed effects included
+# export regression data with fixed effects included
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 combinations = Int64(sum([n*(n+1)/2 for n in 1:N-2]))
@@ -90,29 +77,31 @@ FE_ctry = Int64.(repeat(FE_ctry, S)) # S*combinations×N
 ctry_names_2013 = ["AUS", "AUT", "BEL", "BGR", "BRA", "CAN", "CHN", "CYP", "CZE", "DEU", "DNK", "ESP", "EST", "FIN", "FRA", "GBR", 
     "GRC", "HUN", "IDN", "IND", "IRL", "ITA", "JPN", "KOR", "LTU", "LUX", "LVA", "MEX", "MLT", "NLD", "POL", "PRT", "ROM", "RUS", 
     "SVK", "SVN", "SWE", "TUR", "TWN", "USA"]
-col_names = [["industry", "lhs_Z", "rhs_Z", "lhs_F", "rhs_F"]; ctry_names_2013; "RoW"]
+col_names = [["industry", "lhs_Z", "rhs_Z"]; ctry_names_2013; "RoW"]
 
-df_reg = DataFrames.DataFrame([FE_ind lhs_Z rhs_Z lhs_F rhs_F FE_ctry], col_names)
+df_reg = DataFrames.DataFrame([FE_ind lhs_Z rhs_Z FE_ctry], col_names)
 
-CSV.write(dir * "df_reg.csv", df_reg)
-
+# CSV.write(dir * "df_reg.csv", df_reg)
+# XLSX.writetable(dir * "df_reg.xlsx", df_reg, overwrite=true) # to see results better
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-
 using GLM
 
-df_reg_Z = filter(:lhs_Z => x -> !(ismissing(x) || isnothing(x) || isnan(x)), df_reg)
-df_reg_Z = Float64.(df_reg_Z[:, [:lhs_Z, :rhs_Z]]) # columns need to have the right type!
+df_reg_Z = subset(df_reg, :lhs_Z => ByRow( x -> !(ismissing(x) || isnothing(x) || isnan(x)) ))
+df_reg_Z = df_reg_Z[:, [:industry, :lhs_Z, :rhs_Z]]
+transform!(df_reg_Z, :industry => ByRow(string), [:lhs_Z, :rhs_Z] .=> ByRow(Float64), renamecols=false) # columns need to have the right type!
+
+XLSX.writetable(dir * "df_reg_Z.xlsx", df_reg_Z, overwrite=true) # to see results better
+
+
 
 ols_Z = GLM.lm(@formula(lhs_Z ~ 0 + rhs_Z), df_reg_Z)
 
-# -------
+# -----
 
-# df_reg_F = filter(:lhs_F => x -> !(ismissing(x) || isnothing(x) || isnan(x)), df_reg)
-# df_reg_F =  Float64.(df_reg_F[:, [:lhs_F, :rhs_F]]) # columns need to have the right type! 
-
-# ols_F = GLM.lm(@formula(lhs_F ~ 0 + rhs_F), df_reg_F)
-
-
-
+for i in unique(df_reg_Z.industry)
+    gdf = subset(df_reg_Z, :industry => ByRow(x-> x == i))
+    ols_Z = GLM.lm(@formula(lhs_Z ~ 0 + rhs_Z), gdf)
+    println("Result for industry: $i \n $ols_Z \n")
+end

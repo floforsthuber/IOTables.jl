@@ -77,20 +77,17 @@ function elasticity_data(M::Matrix, τ::Matrix, demand::String, N::Integer, S::I
     if demand == "intermediate"
         # reduce intermediate demand to origin country-industry destination country
         X = [sum(M[i,j:j+S-1]) for i in 1:N*S, j in 1:S:N*S] # NS×N
-    elseif demand == "total"
+
+    elseif demand == "total" # wrong
         X = [sum(M[i,j:j+S-1]) for i in 1:N*S, j in 1:S:N*S] # NS×N
         X = X .+ F
-    elseif demand == "final"
+    elseif demand == "final" # wrong, dont understand how to reshape final demand matrix
         X = M
     else
         println(" × Failure! Specify demand schedule properly! \n")
     end
 
-    if size(τ, 2) == N*S
-        τ_X = [mean(τ[i,j:j+S-1]) for i in 1:N*S, j in 1:S:N*S] # NS×N
-    else
-        τ_X = τ
-    end
+    τ_X = τ
 
     # initialize loop
     lhs = Float64[]

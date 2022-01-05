@@ -288,6 +288,9 @@ function create_input_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, π_Z::
 
     # Country-industry final import expenditure shares (columns sum to 1)
     α = [sum(F[i:S:(N-1)*S+i, j])/F_ctry[j] for i in 1:S, j in 1:N] # S×N
+
+    # α = [sum(F[i:S:(N-1)*S+i, j])/(VA_ctry[j]+TB_ctry[j]) for i in 1:S, j in 1:N] # used in paper, problem when TB=0?
+
     α = ifelse.(isnan.(α), 0.0, α) # needed in case F_ctry = 0 (unlikely since all entries in F >= 0, but still necessary)
     !any(0.0 .<= α .<= 1.0) && println(" × Problem! Not all elements in γ are in intervall [0, 1]")
 

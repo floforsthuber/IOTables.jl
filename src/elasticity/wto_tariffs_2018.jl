@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
-# 
+# Script to prepare WTO tariff data from 2018
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 using DataFrames, RData, XLSX, LinearAlgebra, Statistics, CSV
@@ -211,7 +211,7 @@ ctry_EU28 = ["AUT", "BEL", "BGR", "HRV", "CYP", "CZE", "DNK", "EST", "FIN", "FRA
 
 countries = [ctry_names_2013; "ZoW"]
 
-industries = lpad.(1:35, 2, '0')
+industries = lpad.(1:S, 2, '0')
 
 τ_Z = ones(N*S,N)
 
@@ -219,15 +219,21 @@ for (i, ctry_i) in enumerate(countries)
     for (s, ind) in enumerate(industries)
         for (j, ctry_j) in enumerate(countries)
 
-            if ctry_i == ctry_j
+            if ctry_i == ctry_j # within country trade
                 τ_Z[(i-1)*S+s,j] = 0.0
-            elseif ctry_i in ctry_EU28 && ctry_j in ctry_EU28
+
+            elseif ctry_i in ctry_EU28 && ctry_j in ctry_EU28 # within EU trade
                 τ_Z[(i-1)*S+s,j] = 0.0
+
             else
                 ctry_i = ifelse(ctry_i in ctry_EU28, "EEC", ctry_i)
                 ctry_j = ifelse(ctry_j in ctry_EU28, "EEC", ctry_j)
+
+                # assume zero tariffs for countries/industries which are not available
+                # assume RoW imposes zero tariffs on all trading partners
                 value = df.tariff[(df.reporter_ctry .== ctry_i) .& (df.partner_ctry .== ctry_j) .& (df.ISIC .== ind)]
                 tariff = ifelse(isempty(value), 0.0, value)
+
                 τ_Z[(i-1)*S+s,j] = tariff[1]
             end
 
