@@ -37,13 +37,15 @@ S = 35 # number of industries
 
 Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, source, revision, year, N, S)
 
-df_tariffs = DataFrame(XLSX.readtable(dir * "MFN/tariff_matrix.xlsx", "Sheet1")...)
+df_tariffs = DataFrame(XLSX.readtable(dir * "WTO/tariff_matrix.xlsx", "Sheet1")...)
 τ_Z = Matrix(convert.(Float64, df_tariffs[:,2:end]))
 τ_Z = 1.0 .+ τ_Z ./ 100
 τ_F = copy(τ_Z)
 
 # -------
 
+M = copy(transpose(Z))
+Z = copy(M)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # reduce to EU
@@ -121,7 +123,7 @@ N = 15
 τ_Z_new2 = τ_Z_new .* (1 .+ rand(0.0:0.01:0.2, N*S, N))
 #τ_Z_new2 = 1 .+ rand(0.0:0.01:0.2, N*S, N*S) # NS×N
 
-lhs_Z, rhs_Z = elasticity_data(Z_new, τ_Z_new2, "intermediate", N, S)
+lhs_Z, rhs_Z = elasticity_data(Z_new, τ_Z_new, "intermediate", N, S)
 
 # -------
 

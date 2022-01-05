@@ -21,7 +21,7 @@ dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data
 # WIOD rev. 2013
 source = "WIOD"
 revision = "2013"
-year = 1995 # specified year
+year = 2010 # specified year
 N = 41 # number of countries 
 S = 35 # number of industries
 
@@ -36,25 +36,33 @@ S = 35 # number of industries
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, source, revision, year, N, S)
+M = copy(transpose(Z))
 
-df_tariffs = DataFrame(XLSX.readtable(dir * "MFN/tariff_matrix.xlsx", "Sheet1")...)
+
+# -------
+
+df_tariffs = DataFrame(XLSX.readtable(dir * "WTO/tariff_matrix.xlsx", "Sheet1")...)
 τ_Z = Matrix(convert.(Float64, df_tariffs[:,2:end]))
 τ_Z = 1.0 .+ τ_Z ./ 100
 τ_F = copy(τ_Z)
 
-# -------
 
-# use random tariff matrix for now
-τ_Z = 1 .+ rand(0.0:0.01:0.1, N*S, N*S) # NS×N
-τ_F = 1 .+ rand(0.0:0.01:0.1, N*S, N*S) # NS×N
-M = copy(transpose(Z))
+# # use random tariff matrix for now
+# τ_Z = 1 .+ rand(0.0:0.01:0.1, N*S, N*S) # NS×N
+# τ_F = 1 .+ rand(0.0:0.01:0.1, N*S, N*S) # NS×N
+
+# -------
 
 
 
 lhs_Z, rhs_Z = elasticity_data(Z, τ_Z, "intermediate", N, S)
 lhs_F, rhs_F = elasticity_data(F, τ_F, "final", N, S)
 
-# -------
+lhs_Z, rhs_Z = elasticity_data(M, τ_Z, "intermediate", N, S)
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# export with fixed effects included
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 combinations = Int64(sum([n*(n+1)/2 for n in 1:N-2]))
 
@@ -86,7 +94,7 @@ col_names = [["industry", "lhs_Z", "rhs_Z", "lhs_F", "rhs_F"]; ctry_names_2013; 
 
 df_reg = DataFrames.DataFrame([FE_ind lhs_Z rhs_Z lhs_F rhs_F FE_ctry], col_names)
 
-# CSV.write(dir * "df_reg.csv", df_reg)
+CSV.write(dir * "df_reg.csv", df_reg)
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -101,10 +109,10 @@ ols_Z = GLM.lm(@formula(lhs_Z ~ 0 + rhs_Z), df_reg_Z)
 
 # -------
 
-df_reg_F = filter(:lhs_F => x -> !(ismissing(x) || isnothing(x) || isnan(x)), df_reg)
-df_reg_F =  Float64.(df_reg_F[:, [:lhs_F, :rhs_F]]) # columns need to have the right type! 
+# df_reg_F = filter(:lhs_F => x -> !(ismissing(x) || isnothing(x) || isnan(x)), df_reg)
+# df_reg_F =  Float64.(df_reg_F[:, [:lhs_F, :rhs_F]]) # columns need to have the right type! 
 
-ols_F = GLM.lm(@formula(lhs_F ~ 0 + rhs_F), df_reg_F)
+# ols_F = GLM.lm(@formula(lhs_F ~ 0 + rhs_F), df_reg_F)
 
 
 

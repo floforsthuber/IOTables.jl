@@ -51,7 +51,7 @@ end
 
 
 """
-    CP_statistic(M::Matrix, τ::Matrix, demand::String, N::Integer, S::Integer)
+    elasticity_data(M::Matrix, τ::Matrix, demand::String, N::Integer, S::Integer)
 
 A summary function to collect all industry LHS and RHS statistics of equation (23) in Caliendo and Parro (2015). 
     Notice that intermediate and final demand are treated seperately.
@@ -63,12 +63,12 @@ A summary function to collect all industry LHS and RHS statistics of equation (2
 - `S::Integer`: number of origin/destination industries.
 
 # Output
-- `lhs_Z::Vectpr{Float64}`: S*(Σᴺ⁻²n(n+1)/2)×1, LHS of eq. (23) in logs for intermediate inputs and all industries.
-- `rhs_Z::Vectpr{Float64}`: S*(Σᴺ⁻²n(n+1)/2)×1, RHS of eq. (23) in logs for intermediate inputs and all industries.
+- `lhs::Vectpr{Float64}`: S*(Σᴺ⁻²n(n+1)/2)×1, LHS of eq. (23) in logs for intermediate inputs and all industries.
+- `rhs::Vectpr{Float64}`: S*(Σᴺ⁻²n(n+1)/2)×1, RHS of eq. (23) in logs for intermediate inputs and all industries.
 
 # Examples
 ```julia-repl
-julia> lhs_Z, rhs_Z, lhs_F, rhs_F = elasticity_data(Z, F, τ_Z, τ_F, N, S)
+julia> lhs, rhs = elasticity_data(Z, F, τ_Z, τ_F, N, S)
 ```
 """
 

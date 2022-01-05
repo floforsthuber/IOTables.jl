@@ -4,13 +4,13 @@
 
 using DataFrames, RData, XLSX, LinearAlgebra, Statistics, CSV
 
-dir = "X:/VIVES/1-Personal/Florian/git/IOTables/src/"
-include(dir * "model/transform_data.jl") # Script with functions to import and transform raw data
-include(dir * "model/price_hat.jl") # Script with function to obtain the price index
-include(dir * "model/wage_hat.jl") # Script with function to obtain the wages and gross output
-include(dir * "counterfactual/tariffs_function.jl") # Script with functions to create τ_hat_Z, τ_hat_F from tariff data
-include(dir * "counterfactual/head_ries_index.jl") # Script with functions to create bilateral Head-Ries index (symmetric bilateral trade costs)
-include(dir * "elasticity/elasticities_functions.jl") # Script with functions to compute statistics for estimating sectoral trade elasticities (method of Caliendo and Parro, 2015)
+# dir = "X:/VIVES/1-Personal/Florian/git/IOTables/src/"
+# include(dir * "model/transform_data.jl") # Script with functions to import and transform raw data
+# include(dir * "model/price_hat.jl") # Script with function to obtain the price index
+# include(dir * "model/wage_hat.jl") # Script with function to obtain the wages and gross output
+# include(dir * "counterfactual/tariffs_function.jl") # Script with functions to create τ_hat_Z, τ_hat_F from tariff data
+# include(dir * "counterfactual/head_ries_index.jl") # Script with functions to create bilateral Head-Ries index (symmetric bilateral trade costs)
+# include(dir * "elasticity/elasticities_functions.jl") # Script with functions to compute statistics for estimating sectoral trade elasticities (method of Caliendo and Parro, 2015)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -33,7 +33,7 @@ S = 35 # number of industries
 # S = 56 # number of industries
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
-# prepare tariff data from WTO
+# prepare tariff data from WTO for EU
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 path = dir * "WTO/EU_2018_MFN_BPT.csv"
@@ -41,7 +41,7 @@ path = dir * "WTO/EU_2018_MFN_BPT.csv"
 df2 = CSV.read(path, DataFrame, delim=',', quoted=true, quotechar='"')
 
 # problem with reading data (one column gets split into multiple)
-cols = ["Indicator", "Reporting Economy", "Partner Economy ISO3A Code", "Product/Sector Code", "Year", "Value", "Column25", "Column26", "Column27", "Column28"]
+cols = ["Indicator", "Reporting Economy ISO3A Code", "Partner Economy ISO3A Code", "Product/Sector Code", "Year", "Value", "Column25", "Column26", "Column27", "Column28"]
 df = df2[:, cols]
 
 transform!(df, :Column28 => ByRow(x -> ifelse(ismissing(x), missing, string(x))), renamecols=false) # tariffs imported as Int
@@ -69,26 +69,66 @@ df.partner_ctry .= ifelse.(df.indicator .== "MFN", "WTO_MFN", df.partner_ctry)
 df_MFN = subset(df, :indicator => x -> x .== "MFN")
 df_BPT = subset(df, :indicator => x -> x .== "BPT")
 
-df_comb = leftjoin(df_BPT, df_MFN[:,[:product_code, :tariff]], on=:product_code, makeunique=true) # possibly reversing join would yield more observations
-# but at least we would not lose the tariffs for product aggregates
-rename!(df_comb, ["tariff", "tariff_1"] .=> ["BPT", "MFN"])
-df_comb.tariff = ifelse.(ismissing.(df_comb.BPT), df_comb.MFN, df_comb.BPT)
+# ------
 
-df_formated = df_comb[:, Not(["indicator", "BPT", "MFN"])]
+df_t = copy(df_MFN)
+ctry = ["AUS", "BRA", "CAN", "CHN", "IDN", "IND", "JPN", "KOR", "RUS", "TUR", "TWN", "USA"] # countries with WTO data
+ctry = [ctry; "EEC"] # add RoW and EU
 
-# only 3.5% of tariffs are different to 0?!
-# possibly better if we restrict ctry list
-count(df_formated.tariff .== 0.0)/nrow(df_formated)
+for i in ctry
+    df_loop = copy(df_MFN)
+    df_loop.partner_ctry .= i
+    df_loop.indicator .= "BPT"
+    append!(df_t, df_loop)
+end
+
+# take BPT tariff if available
+df_join = leftjoin(df_t, df_BPT[:, [:partner_ctry, :product_code, :tariff]], on=[:partner_ctry, :product_code], makeunique=true)
+rename!(df_join, ["tariff", "tariff_1"] .=> ["MFN", "BPT"])
+df_join.tariff = ifelse.(ismissing.(df_join.BPT), df_join.MFN, df_join.BPT)
+df_tariffs = df_join[:, Not(["indicator", "BPT", "MFN"])] # new collection of tariffs for countries which use MFN + BPT
 
 
+# ------
 
+# conversion from HS2017 6digits to ISIC rev. 4 (using HS2012 for now)
+df_corr = DataFrame(XLSX.readtable(dir * "HS_ISIC_BEC_EUC.xlsx", "Sheet1")...)
+
+df_corr = df_corr[:, ["HS_6digit", "ISIC_first_2_digits"]]
+rename!(df_corr, ["product_code", "ISIC"])
+transform!(df_corr, [:product_code, :ISIC] .=> ByRow(string), renamecols=false)
+
+# ------
+
+function aggregation(df::DataFrame, df_corr::DataFrame)
+    df.product_code = lpad.(df.product_code, 6, '0')
+
+    df_join = leftjoin(df, df_corr, on=:product_code)
+    subset!(df_join, :ISIC => ByRow(x -> !ismissing(x) && x != "missing")) # take out missing values (MFN also includes 2-4-digit codes)
+    gdf = groupby(df_join, [:reporter_ctry, :partner_ctry, :ISIC])
+    df = combine(gdf, :tariff => (x -> mean(skipmissing(x))) => :tariff)
+    sort!(df, [:partner_ctry, :ISIC])
+
+    df.tariff .= ifelse.(df.reporter_ctry .== df.partner_ctry, 0.0, df.tariff)
+    df.partner_ctry .= ifelse.(df.partner_ctry .== "WTO_MFN", "ZoW", df.partner_ctry) # take MFN tariffs for RoW
+
+    return df
+end
+
+# ------
+
+df = aggregation(df_tariffs, df_corr)
+
+missing_values = round(count(ismissing.(df.tariff))/nrow(df)*100, digits=2)
+non_zero = round((1 - count(skipmissing(df.tariff .== 0.0))/nrow(df))*100, digits=2)
+println(" - EU: $missing_values percent are missing. Out of non-missing values, $non_zero percent are non-zero tariffs.")
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# prepare tariff data from WTO for other countries
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-ctry = ["AUS", "CAN", "CHN", "IDN", "JPN", "KOR", "TWN", "USA"]
-
-function transform_wto_data(path::String)
+function transform_wto_data(reporter::String, path::String)
     
     df = CSV.read(path, DataFrame, delim=',', quoted=true, quotechar='"')
     cols = ["Indicator", "Reporting Economy ISO3A Code", "Partner Economy ISO3A Code", "Product/Sector Code", "Year", "Value"]
@@ -101,28 +141,101 @@ function transform_wto_data(path::String)
     df.partner_ctry .= ifelse.(df.indicator .== "MFN", "WTO_MFN", df.partner_ctry)
 
     # use MFN tariff for tariffs which are missing
+
+    # use MFN tariff for tariffs which are missing
     df_MFN = subset(df, :indicator => x -> x .== "MFN")
-    df_BPT = subset(df, :indicator => x -> x .== "BPT")
+    
+    if reporter in ["BRA", "IND"]
+        df_BPT = copy(df_MFN) # only have MFN tariffs
+    else
+        df_BPT = subset(df, :indicator => x -> x .== "BPT")
+    end
 
-    df_comb = leftjoin(df_BPT, df_MFN[:,[:product_code, :tariff]], on=:product_code, makeunique=true) # possibly reversing join would yield more observations
-    # but at least we would not lose the tariffs for product aggregates
-    rename!(df_comb, ["tariff", "tariff_1"] .=> ["BPT", "MFN"])
-    df_comb.tariff = ifelse.(ismissing.(df_comb.BPT), df_comb.MFN, df_comb.BPT)
+    # ------
 
-    df_formated = df_comb[:, Not(["indicator", "BPT", "MFN"])]
+    df_t = copy(df_MFN) # initialize
 
-    non_zero = round((1 - count(df_formated.tariff .== 0.0)/nrow(df_formated))*100, digits=2)
-    println(" - $non_zero percent are non-zero tariffs.")
+    # create MFN tariffs for each country in IO Table and then match BPT
+    for i in ctry
+        df_loop = copy(df_MFN)
+        df_loop.partner_ctry .= i
+        df_loop.indicator .= "BPT"
+        append!(df_t, df_loop)
+    end
 
+    # take BPT tariff if available
+    df_join = leftjoin(df_t, df_BPT[:, [:partner_ctry, :product_code, :tariff]], on=[:partner_ctry, :product_code], makeunique=true)
+    rename!(df_join, ["tariff", "tariff_1"] .=> ["MFN", "BPT"])
+    df_join.tariff = ifelse.(ismissing.(df_join.BPT), df_join.MFN, df_join.BPT)
+    df_tariffs = df_join[:, Not(["indicator", "BPT", "MFN"])] # new collection of tariffs for countries which use MFN + BPT
 
-    return df_formated
+    df = aggregation(df_tariffs, df_corr)
+
+    missing_values = round(count(ismissing.(df.tariff))/nrow(df)*100, digits=2)
+    non_zero = round((1 - count(skipmissing(df.tariff .== 0.0))/nrow(df))*100, digits=2)
+    println(" - $reporter: $missing_values percent are missing. Out of non-missing values, $non_zero percent are non-zero tariffs.")
+
+    return df
 end
 
-for i in ctry
-    path = dir * "WTO/" * i * "_2018_MFN_BPT.csv"
-    df = transform_wto_data(path)
+wto_ctry = ["AUS", "BRA", "CAN", "CHN", "IDN", "IND", "JPN", "KOR", "MEX", "RUS", "TUR", "TWN", "USA"] # countries in IO table
+
+for i in wto_ctry
+    if i in ["RUS", "TUR"] # data for 2018 not available
+        path = dir * "WTO/" * i * "_2019_MFN_BPT.csv"
+        append!(df, transform_wto_data(i, path))
+    elseif i in ["BRA", "IND", "MEX"] # ctrys without preferential trade agreements
+        path = dir * "WTO/" * i * "_2018_MFN.csv"
+        append!(df, transform_wto_data(i, path))
+    else
+        path = dir * "WTO/" * i * "_2018_MFN_BPT.csv"
+        append!(df, transform_wto_data(i, path))
+    end
 end
 
 
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# format tariffs to into NS×N matrix
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+df.reporter_ctry .= ifelse.(df.reporter_ctry .== "CHT", "TWN", df.reporter_ctry)
+df.partner_ctry .= ifelse.(df.partner_ctry .== "CHT", "TWN", df.partner_ctry)
+
+ctry_names_2013 = ["AUS", "AUT", "BEL", "BGR", "BRA", "CAN", "CHN", "CYP", "CZE", "DEU", "DNK", "ESP", "EST", "FIN", "FRA", "GBR", 
+    "GRC", "HUN", "IDN", "IND", "IRL", "ITA", "JPN", "KOR", "LTU", "LUX", "LVA", "MEX", "MLT", "NLD", "POL", "PRT", "ROM", "RUS", 
+    "SVK", "SVN", "SWE", "TUR", "TWN", "USA"]
+
+ctry_EU28 = ["AUT", "BEL", "BGR", "HRV", "CYP", "CZE", "DNK", "EST", "FIN", "FRA", "DEU", "GBR", "GRC", "HUN", "IRL", "ITA", "LVA", 
+    "LTU", "LUX", "MLT", "NLD", "POL", "PRT", "ROM", "SVK", "SVN", "ESP", "SWE"]
+
+countries = [ctry_names_2013; "ZoW"]
+
+industries = lpad.(1:35, 2, '0')
+
+τ_Z = ones(N*S,N)
+
+for (i, ctry_i) in enumerate(countries)
+    for (s, ind) in enumerate(industries)
+        for (j, ctry_j) in enumerate(countries)
+
+            if ctry_i == ctry_j
+                τ_Z[(i-1)*S+s,j] = 0.0
+            elseif ctry_i in ctry_EU28 && ctry_j in ctry_EU28
+                τ_Z[(i-1)*S+s,j] = 0.0
+            else
+                ctry_i = ifelse(ctry_i in ctry_EU28, "EEC", ctry_i)
+                ctry_j = ifelse(ctry_j in ctry_EU28, "EEC", ctry_j)
+                value = df.tariff[(df.reporter_ctry .== ctry_i) .& (df.partner_ctry .== ctry_j) .& (df.ISIC .== ind)]
+                tariff = ifelse(isempty(value), 0.0, value)
+                τ_Z[(i-1)*S+s,j] = tariff[1]
+            end
+
+        end
+    end
+end
+
+# export
+rows = repeat(countries, inner=S) .* "__" .* repeat(industries, outer=N)
+df_tariff_matrix = DataFrame([rows τ_Z], ["reporter"; countries])
+XLSX.writetable(dir * "WTO/tariff_matrix.xlsx", df_tariff_matrix, overwrite=true)
