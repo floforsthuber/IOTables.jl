@@ -18,7 +18,7 @@ dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data
 # WIOD rev. 2013
 source = "WIOD"
 revision = "2013"
-year = 2010 # specified year
+year = 2011 # specified year
 N = 41 # number of countries 
 S = 35 # number of industries
 
@@ -35,7 +35,7 @@ Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data
 
 # -------
 
-df_tariffs = DataFrame(XLSX.readtable(dir * "WTO/tariff_matrix.xlsx", "Sheet1")...)
+df_tariffs = DataFrame(XLSX.readtable(dir * "WTO/tariff_matrix_" * string(year) * ".xlsx", "Sheet1")...)
 τ_Z = Matrix(convert.(Float64, df_tariffs[:,2:end])) # NS×N
 τ_Z = 1.0 .+ τ_Z ./ 100 # NS×N
 
@@ -152,7 +152,7 @@ XLSX.writetable(dir * "df_reg_EU.xlsx", df_reg, overwrite=true)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-using GLM
+using FixedEffectModels, RegressionTables
 
 df_reg_Z = subset(df_reg, :lhs_Z => ByRow( x -> !(ismissing(x) || isnothing(x) || isnan(x)) ))
 df_reg_Z = df_reg_Z[:, [:industry, :lhs_Z, :rhs_Z]]
@@ -160,13 +160,12 @@ transform!(df_reg_Z, :industry => ByRow(string), [:lhs_Z, :rhs_Z] .=> ByRow(Floa
 
 # XLSX.writetable(dir * "df_reg_Z_EU.xlsx", df_reg_Z, overwrite=true) # to see results better
 
-ols_Z = GLM.lm(@formula(lhs_Z ~ 0 + rhs_Z), df_reg_Z)
-
-# -----
+rr = FixedEffectModels.reg(df_reg_Z, @formula(lhs_Z ~ 0 + rhs_Z), Vcov.robust(), save=true)
 
 for i in unique(df_reg_Z.industry)
     gdf = subset(df_reg_Z, :industry => ByRow(x-> x == i))
-    ols_Z = GLM.lm(@formula(lhs_Z ~ 0 + rhs_Z), gdf)
-    println("Result for industry: $i \n $ols_Z \n")
+    rr = FixedEffectModels.reg(gdf, @formula(lhs_Z ~ 0 + rhs_Z), Vcov.robust(), save=true)
+    reg = RegressionTables.regtable(rr; renderSettings = asciiOutput(), estimformat="%0.4f") # different format
+    println("Result for industry: $i \n $rr \n")
+    #println("Result for industry: $i \n $reg \n")
 end
-

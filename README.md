@@ -6,7 +6,7 @@
 
 # Scripts
 
-A brief overview about the script and their functions in this repository.
+A brief overview about the scripts and their functions in this repository.
 
 ## model
 
@@ -22,7 +22,7 @@ A brief overview about the script and their functions in this repository.
 
 ## elasticity
 
-- **tariff_data.jl:** transforms raw MFN tariffs for 2018 to be used in *elasticities_functions.jl*
+- **wto_tariffs_2018.jl:** transforms ad valorem MFN/BPT tariffs form WTO for 2018 to be used in *elasticities_functions.jl*
 - **elasticities_functions.jl:** computes the statistics in Caliendo and Parro (2015) used in *trade_elasticities.jl*
 - **trade_elasticities.jl:** estimates trade elasticity according to Caliendo and Parro (2015)
 - **trade_elasticities_EU.jl:** estimates trade elasticity according to Caliendo and Parro (2015) but taking EU as aggregate
