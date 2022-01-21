@@ -14,7 +14,7 @@ using DataFrames, RData, XLSX, LinearAlgebra, Statistics, CSV
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data
+dir = "C:/Users/u0148308/data/raw/" # location of raw data
 
 # Data specification
 

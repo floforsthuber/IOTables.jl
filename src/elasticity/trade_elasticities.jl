@@ -11,7 +11,7 @@ include(dir * "elasticity/elasticities_functions.jl") # Script with functions to
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data
+dir = "C:/Users/u0148308/data/raw/" # location of raw data
 
 # Data specification
 

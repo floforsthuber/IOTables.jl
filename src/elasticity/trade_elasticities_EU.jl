@@ -11,7 +11,7 @@ include(dir * "elasticity/elasticities_functions.jl") # Script with functions to
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data
+dir = "C:/Users/u0148308/data/raw/" # location of raw data
 
 # Data specification
 
@@ -165,7 +165,6 @@ rr = FixedEffectModels.reg(df_reg_Z, @formula(lhs_Z ~ 0 + rhs_Z), Vcov.robust(),
 for i in unique(df_reg_Z.industry)
     gdf = subset(df_reg_Z, :industry => ByRow(x-> x == i))
     rr = FixedEffectModels.reg(gdf, @formula(lhs_Z ~ 0 + rhs_Z), Vcov.robust(), save=true)
-    reg = RegressionTables.regtable(rr; renderSettings = asciiOutput(), estimformat="%0.4f") # different format
+    # reg = RegressionTables.regtable(rr; renderSettings = asciiOutput(), estimformat="%0.4f") # different format
     println("Result for industry: $i \n $rr \n")
-    #println("Result for industry: $i \n $reg \n")
 end

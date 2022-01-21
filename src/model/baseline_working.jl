@@ -11,7 +11,7 @@ include(dir * "model/wage_hat.jl") # Script with function to obtain the wages an
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data
+dir = "C:/Users/u0148308/data/raw/" # location of raw data
 
 # Data specification
 
