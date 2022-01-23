@@ -1,141 +1,151 @@
-# # -------------------------------------------------------------------------------------------------------------------------------------------------------------
-# # Baseline model
-# # -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Script to estimate Caliendo and Parro (2015) trade elasticities
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# using DataFrames, RData,  XLSX, LinearAlgebra, Statistics
+using DataFrames, RData, XLSX, LinearAlgebra, Statistics, CSV
 
-# include("transform_data2.jl") # Script with functions to import and transform raw data
-# include("price_hat.jl") # Script with function to obtain the price index
-# include("wage_hat.jl") # Script with function to obtain the wages and gross output
-# include("tariffs_function.jl") # Script with functions to create τ_hat_Z, τ_hat_F from tariff data
-# # -------------------------------------------------------------------------------------------------------------------------------------------------------------
+dir = "X:/VIVES/1-Personal/Florian/git/IOTables/src/"
+include(dir * "model/transform_data.jl") # Script with functions to import and transform raw data
+# include(dir * "elasticity/elasticities_functions.jl") # Script with functions to compute statistics for estimating sectoral trade elasticities (method of Caliendo and Parro, 2015)
+# include(dir * "elasticity/wto_tariffs_2018.jl") # Script to prepare WTO tariff data from 2018
 
-# years = 2000:2014 # vector with years covered by WIOD Rev. 2016
-# N = 41 # number of countries 
-# S = 35 # number of industries
-# dir = "C:/Users/u0148308/Desktop/raw/" # location of raw data
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# # -------------------------------------------------------------------------------------------------------------------------------------------------------------
+dir = "C:/Users/u0148308/data/raw/" # location of raw data
 
-# Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, "2013", 1995, N, S)
+# Data specification
 
-# # iteration parameters
-# vfactor = 0.4
-# tolerance = 1e-6
-# max_iteration = 100
-# iteration = 0
-# max_error = 1e7
+# WIOD rev. 2013
+source = "WIOD"
+revision = "2013"
+year = 2011 # specified year
+N = 41 # number of countries 
+S = 35 # number of industries
 
-# # sectoral trade elasticity
-# θ = 5 # assumption
-# θ = fill(θ, N*S) # NS×1, work with country-industry elasticities
+# # WIOD rev. 2016
+# source = "WIOD"
+# revision = "2016"
+# year = 2014 # specified year
+# N = 44 # number of countries 
+# S = 56 # number of industries
 
-# # trade costs
-# τ_hat_Z = ones(N*S, N*S) # NS×NS
-# τ_hat_F = ones(N*S, N) # NS×N
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# # initialize wages and price indices
-# w_hat = ones(N) # N×1
+Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, source, revision, year, N, S)
 
-# # # adjust trade balance, (if active => adjustments such that there is no trade deficit, i.e. counterfactual in itself)
-# # TB_ctry .= 0.0
+# -------
 
+ctry_names = ["AUS", "AUT", "BEL", "BGR", "BRA", "CAN", "CHN", "CYP", "CZE", "DEU", "DNK", "ESP", "EST", "FIN", "FRA", "GBR", 
+    "GRC", "HUN", "IDN", "IND", "IRL", "ITA", "JPN", "KOR", "LTU", "LUX", "LVA", "MEX", "MLT", "NLD", "POL", "PRT", "ROM", "RUS", 
+    "SVK", "SVN", "SWE", "TUR", "TWN", "USA"]
 
-# # -------------------------------------------------------------------------------------------------------------------------------------------------------------
+ctry_EU = ["AUT", "BEL", "BGR", "CYP", "CZE", "DNK", "EST", "FIN", "FRA", "DEU", "GBR", "GRC", "HUN", "IRL", "ITA", "LVA", 
+    "LTU", "LUX", "MLT", "NLD", "POL", "PRT", "ROM", "SVK", "SVN", "ESP", "SWE"] # with GBR but without HVR
 
-# ctry_names_2016 = ["AUS", "AUT", "BEL", "BGR", "BRA", "CAN", "CHE", "CHN", "CYP", "CZE", "DEU", "DNK", "ESP", "EST", "FIN", "FRA", 
-#     "GBR", "GRC", "HRV", "HUN", "IDN", "IND", "IRL", "ITA", "JPN", "KOR", "LTU", "LUX", "LVA", "MEX", "MLT", "NLD", "NOR", "POL", 
-#     "PRT", "ROU", "RUS", "SVK", "SVN", "SWE", "TUR", "TWN", "USA"]
-# ctry_names_2016 = [ctry_names_2016; "ZoW"] # use "ZoW" instead of "RoW" so we can sort later on
+countries = [ctry_names; "ZoW"]
 
+industries = lpad.(1:S, 2, '0') # left pad with leading zeros so we can sort later on
 
+# -------
 
 
-# # countries present in WIOD
-# ctry_names_2013 = ["AUS", "AUT", "BEL", "BGR", "BRA", "CAN", "CHN", "CYP", "CZE", "DEU", "DNK", "ESP", "EST", "FIN", "FRA", "GBR", 
-#     "GRC", "HUN", "IDN", "IND", "IRL", "ITA", "JPN", "KOR", "LTU", "LUX", "LVA", "MEX", "MLT", "NLD", "POL", "PRT", "ROM", "RUS", 
-#     "SVK", "SVN", "SWE", "TUR", "TWN", "USA"]
-# ctry_names_2013 = [ctry_names_2013; "ZoW"] # use "ZoW" instead of "RoW" so we can sort later on
+function index_subset(N::Integer, S::Integer, 
+    ctry_all::Vector{String}, ctry_subset::Vector{String}, ind_all::Vector{String}, ind_subset::Vector{String})
+    
+    # subsetting rows
+    N_subset = length(ctry_subset)
+    S_subset = length(ind_subset)
 
-# industries = lpad.(1:S, 2, '0') # left pad with leading zeros so we can sort later on
+    all = repeat(ctry_all, inner=S) .* "_" .* repeat(ind_all, outer=N) # all row country-industry pairs
+    subset = repeat(ctry_subset, inner=S_subset) .* "_" .* repeat(ind_subset, outer=N_subset) # subset of country-industry pairs
+    index_subset = findall(in(subset), all)
 
+    return index_subset
+end
 
-# ctry_EU27 = ["AUT", "BEL", "BGR", "HRV", "CYP", "CZE", "DNK", "EST", "FIN", "FRA", "DEU", "GRC", "HUN", "IRL", "ITA", "LVA", 
-#     "LTU", "LUX", "MLT", "NLD", "POL", "PRT", "ROM", "SVK", "SVN", "ESP", "SWE"]
+function ctry_aggregation(Z::Matrix, F::Matrix, N::Integer, S::Integer, 
+    ctry_all::Vector{String}, ctry_subset::Vector{String}, ind_all::Vector{String}, ind_subset::Vector{String})
 
+    # obtain indices for subsetting Z and F
+    index_row_subset = index_subset(N, S, ctry_all, ctry_subset, ind_all, ind_subset)
+    index_col_subset = index_subset(N, S, ctry_all, ctry_subset, ind_all, ind_subset)
+    index_col_subset_F = findall(in(ctry_subset), ctry_all) # only have countries in columns
 
-# # Tariff data (matched to WIOD rev. 2016 sectoral aggregation)
-# df_tariffs = DataFrame(XLSX.readtable(dir * "EU_avg_tariffs.xlsx", "Sheet1")...)
-# transform!(df_tariffs, :industry_WIOD_2016 => ByRow(x->lpad(x, 2, '0')), renamecols=false)
-# df_tariffs[:, :avg_tariff_F_soft] .= (df_tariffs.avg_tariff .+ 2.77) ./ 100 .+ 1.0
-# df_tariffs[:, :avg_tariff_F_hard] .= (df_tariffs.avg_tariff .+ 8.31) ./ 100 .+ 1.0
-# df_tariffs[:, :avg_tariff_Z_soft] .= (df_tariffs.avg_tariff_F_soft .- 1) ./ 2 .+ 1
-# df_tariffs[:, :avg_tariff_Z_hard] .= (df_tariffs.avg_tariff_F_hard .- 1) ./ 2 .+ 1
+    # subset columns, construct aggregate and rebuild matrix
+    N_col_subset = length(ctry_subset)
+    S_col_subset = length(ind_subset)
 
+    Z_col_subset = Z[:, index_col_subset]
+    Z_col_subset = [sum(Z_col_subset[i,j:S_col_subset:(N_col_subset-1)*S_col_subset+j]) for i in 1:N*S, j in 1:S_col_subset] # sum over industries to create aggregate
+    Z_col_other = Z[:, Not(index_col_subset)] # other countries
+    Z_new = hcat(Z_col_other, Z_col_subset) # rebuild Z with new aggregate as last columns
 
-# ctry_exiting_EU = ["DEU"]
-# ctry_remaining_EU = filter(x-> !(x in ctry_exiting_EU), ctry_EU27)
+    F_col_subset = F[:, index_col_subset_F]
+    F_col_subset = [sum(F_col_subset[i,:]) for i in 1:N*S]
+    F_col_other = F[:, Not(index_col_subset_F)] # other countries
+    F_new = hcat(F_col_other, F_col_subset) # rebuild F with new aggregate as last column
 
-# df_affected = country_sector_tariffs(ctry_exiting_EU, ctry_remaining_EU, df_tariffs, df_tariffs, industries, N, S)
-# τ_hat_Z, τ_hat_F = create_τ_hat(df_affected, :avg_tariff_Z_soft, :avg_tariff_F_soft, ctry_names_2013, N, S)
+    # subset rows from new matrix, construct aggregate and rebuild matrix
+    N_row_subset = length(ctry_subset)
+    S_row_subset = length(ind_subset)
+    N_new = size(F_new, 2) # new number of countries
 
-# #XLSX.writetable("clean/tau_Z.xlsx", Tables.table(τ_hat_Z), overwrite=true)
-# #XLSX.writetable("clean/tau_F.xlsx", Tables.table(τ_hat_F), overwrite=true)
+    Z_row_subset = Z_new[index_row_subset, :]
+    Z_row_subset = [sum(Z_row_subset[i:S_row_subset:(N_row_subset-1)*S_row_subset+i,j]) for i in 1:S_row_subset, j in 1:N_new*S_row_subset]
+    Z_row_other = Z_new[Not(index_row_subset), :]
+    Z_new = vcat(Z_row_other, Z_row_subset)
 
-# # -------------------------------------------------------------------------------------------------------------------------------------------------------------
+    F_row_subset = F_new[index_row_subset, :]
+    F_row_subset = [sum(F_row_subset[i:S_row_subset:(N_row_subset-1)*S_row_subset+i,j]) for i in 1:S_row_subset, j in 1:N_new]
+    F_row_other = F_new[Not(index_row_subset), :]
+    F_new = vcat(F_row_other, F_row_subset)
 
-
-# while max_error > tolerance && iteration <= max_iteration
-
-#     # Price indices
-#     P_hat_Z, P_hat_F, π_hat_Z, π_hat_F, cost_hat = create_price_index_hat(w_hat, τ_hat_Z, τ_hat_F, VA_coeff, γ, π_Z, π_F, θ)
-
-#     # Counterfactual trade shares
-#     π_hat_Z = ifelse.(isinf.(π_hat_Z), 0.0, π_hat_Z) # remove Inf
-#     π_hat_F = ifelse.(isinf.(π_hat_F), 0.0, π_hat_F)
-
-#     global π_prime_Z = π_Z .* π_hat_Z # NS×NS
-#     global π_prime_F = π_F .* π_hat_F # NS×N
-
-#     # Labor market clearing
-#     w_hat_prev = copy(w_hat) # store last wage in case new optimization obtains negative wages
-
-#     w_hat, Y_prime, Z_prime, F_prime, ETB_ctry = create_wages_hat(w_hat, vfactor, π_prime_Z, π_prime_F, VA_ctry, TB_ctry, γ, α)
-
-#     # update iteration parameters
-#     error = abs.(w_hat .- w_hat_prev)
-#     max_error = maximum(error) # update error
-#     iteration += 1 # update iteration count
-
-#     if minimum(w_hat) < 0.0
-#         w_hat[:] = copy(w_hat_prev)
-#         println("Outer loop: Iteration $iteration completed with error $max_error (wage negative, rerun with previous estimate)")
-#     else
-#         println("Outer loop: Iteration $iteration completed with error $max_error")
-#     end
+    return Z_new, F_new
+end
 
 
+a, b = aggregation(Z, F, N, S, countries, ctry_EU, industries, industries)
+
+
+
+# function subset(N::Integer, S::Integer, 
+#     ctry_all::Vector{String}, ctry_subset::Vector{String}, ind_all::Vector{String}, ind_subset::Vector{String})
+    
+#     # subsetting rows
+#     N_subset = length(ctry_subset)
+#     S_subset = length(ind_subset)
+
+#     all = repeat(ctry_all, inner=S) .* "_" .* repeat(ind_all, outer=N) # all row country-industry pairs
+#     subset = repeat(ctry_subset, inner=S_subset) .* "_" .* repeat(ind_subset, outer=N_subset) # subset of country-industry pairs
+#     index_subset = findall(in(subset), all)
+
+#     return index_subset
 # end
 
+# row_index_EU_Z = subset(N, S, countries, ctry_EU, industries, industries)
+# col_index_EU_Z = subset(N, S, countries, ctry_EU, industries, industries)
+# col_index_EU_F = findall(in(ctry_EU), countries)
 
-# # Country consumer price index and real wage
-# P0_F_ctry = (ones(S,N) ./ α).^α # S×N
-# P0_F_ctry = [prod(P0_F_ctry[:,j]) for j in 1:N] # N×1, initial consumer price index
+# col_n_subset = length(ctry_EU)
+# col_s_subset = length(industries)
 
-# P_F_ctry = (P_hat_F ./ α).^α # S×N, counterfactual consumer price index
-# P_F_ctry = [prod(P_F_ctry[:,j]) for j in 1:N] # N×1
+# row_n_subset = length(ctry_EU)
+# row_s_subset = length(industries)
 
-# P_hat_F_ctry = P_F_ctry ./ P0_F_ctry # N×1, changes in country price index
 
-# w_hat_real = w_hat ./ P_hat_F_ctry # N×1, real wage changes
+# Z_col_subset = Z[:, col_index_EU_Z]
+# Z_col_EU = [sum(Z_col_subset[i,j:col_s_subset:(col_n_subset-1)*col_s_subset+j]) for i in 1:N*S, j in 1:col_s_subset]
 
-# # -------------------------------------------------------------------------------------------------------------------------------------
+# Z_col_NOT = Z[:, Not(col_index_EU_Z)]
 
-# # Gross output
-# Y_ctry = [sum(Y[i:i+S-1]) for i in 1:S:N*S] # N×1
-# Y_prime_ctry = [sum(Y_prime[i:i+S-1]) for i in 1:S:N*S] # N×1
+# Z_col_new = hcat(Z_col_NOT, Z_col_EU) # now last 35 cols are EU aggregate
 
-# Y_hat_ctry = Y_prime_ctry ./ Y_ctry # N×1, nominal
+# n_NOT = length(countries[findall(!in(ctry_EU), countries)])
 
-# # how to obtain real change since Y is made out of final and intermediate goods?
-# Y_hat_ctry_real = Y_hat_ctry ./ P_hat_F_ctry
+# Z_row_subset = Z_col_new[row_index_EU_Z,:]
+# Z_row_EU = [sum(Z_row_subset[i:row_s_subset:(row_n_subset-1)*row_s_subset+i,j]) for i in 1:row_s_subset, j in 1:(n_NOT+1)*row_s_subset] # only EU to EU intermediate
+
+# Z_row_NOT = Z_col_new[Not(row_index_EU_Z),:]
+
+# Z_new = vcat(Z_row_NOT, Z_row_EU)
+
