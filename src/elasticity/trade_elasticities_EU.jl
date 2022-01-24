@@ -11,9 +11,8 @@ include(dir * "elasticity/elasticities_functions.jl") # Script with functions to
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-dir = "C:/Users/u0148308/data/raw/" # location of raw data
-
 # Data specification
+dir_raw = "C:/Users/u0148308/data/raw/" # location of raw data
 
 # WIOD rev. 2013
 source = "WIOD"
@@ -29,13 +28,21 @@ S = 35 # number of industries
 # N = 44 # number of countries 
 # S = 56 # number of industries
 
+# # OECD rev. 2021
+# source = "OECD"
+# revision = "2021"
+# year = 1995 # specified year
+# N = 71 # number of countries 
+# S = 45 # number of industries
+
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, source, revision, year, N, S)
+Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir_raw, source, revision, year, N, S)
 
-# -------
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-df_tariffs = DataFrame(XLSX.readtable(dir * "WTO/tariff_matrix_" * string(year) * ".xlsx", "Sheet1")...)
+
+df_tariffs = DataFrame(XLSX.readtable(dir_raw * "WTO/tariff_matrix_" * string(year) * ".xlsx", "Sheet1")...)
 τ_Z = Matrix(convert.(Float64, df_tariffs[:,2:end])) # NS×N
 τ_Z = 1.0 .+ τ_Z ./ 100 # NS×N
 
@@ -146,8 +153,8 @@ col_names = [["industry", "lhs_Z", "rhs_Z"]; ctry_names; "RoW"; "EU"]
 
 df_reg = DataFrames.DataFrame([FE_ind lhs_Z rhs_Z FE_ctry], col_names)
 
-CSV.write(dir * "df_reg_EU.csv", df_reg)
-XLSX.writetable(dir * "df_reg_EU.xlsx", df_reg, overwrite=true)
+CSV.write(dir_raw * "df_reg_EU.csv", df_reg)
+XLSX.writetable(dir_raw * "df_reg_EU.xlsx", df_reg, overwrite=true)
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -158,7 +165,7 @@ df_reg_Z = subset(df_reg, :lhs_Z => ByRow( x -> !(ismissing(x) || isnothing(x) |
 df_reg_Z = df_reg_Z[:, [:industry, :lhs_Z, :rhs_Z]]
 transform!(df_reg_Z, :industry => ByRow(string), [:lhs_Z, :rhs_Z] .=> ByRow(Float64), renamecols=false) # columns need to have the right type!
 
-# XLSX.writetable(dir * "df_reg_Z_EU.xlsx", df_reg_Z, overwrite=true) # to see results better
+# XLSX.writetable(dir_raw * "df_reg_Z_EU.xlsx", df_reg_Z, overwrite=true) # to see results better
 
 rr = FixedEffectModels.reg(df_reg_Z, @formula(lhs_Z ~ 0 + rhs_Z), Vcov.robust(), save=true)
 

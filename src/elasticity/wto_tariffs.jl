@@ -14,14 +14,13 @@ using DataFrames, RData, XLSX, LinearAlgebra, Statistics, CSV
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-dir = "C:/Users/u0148308/data/raw/" # location of raw data
-
 # Data specification
+dir_raw = "C:/Users/u0148308/data/raw/" # location of raw data
 
 # WIOD rev. 2013
 source = "WIOD"
 revision = "2013"
-year = 1995 # specified year
+year = 2011 # specified year
 N = 41 # number of countries 
 S = 35 # number of industries
 
@@ -32,13 +31,21 @@ S = 35 # number of industries
 # N = 44 # number of countries 
 # S = 56 # number of industries
 
+# # OECD rev. 2021
+# source = "OECD"
+# revision = "2021"
+# year = 1995 # specified year
+# N = 71 # number of countries 
+# S = 45 # number of industries
+
+
 year = 2018 # year for tariff data
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # prepare tariff data from WTO for EU
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-path = dir * "WTO/EU.csv"
+path = dir_raw * "WTO/EU.csv"
 
 df2 = CSV.read(path, DataFrame, delim=',', quoted=true, quotechar='"')
 
@@ -124,7 +131,7 @@ df_tariffs = df_join[:, Not(["indicator", "BPT", "MFN"])] # new collection of ta
 # ------
 
 # conversion from HS2017 6digits to ISIC rev. 4 (using HS2012 for now)
-df_corr = DataFrame(XLSX.readtable(dir * "HS_ISIC_BEC_EUC.xlsx", "Sheet1")...)
+df_corr = DataFrame(XLSX.readtable(dir_raw * "HS_ISIC_BEC_EUC.xlsx", "Sheet1")...)
 
 df_corr = df_corr[:, ["HS_6digit", "ISIC_first_2_digits"]]
 rename!(df_corr, ["product_code", "ISIC"])
@@ -262,7 +269,7 @@ wto_ctry = ["AUS", "BRA", "CAN", "CHN", "IDN", "IND", "JPN", "KOR", "MEX", "RUS"
 
 
 for i in wto_ctry
-    path = dir * "WTO/" * i * ".csv"
+    path = dir_raw * "WTO/" * i * ".csv"
     println("\n $i:")
     append!(df, transform_wto_data(path))
 end
@@ -317,4 +324,4 @@ end
 # export data
 rows = repeat(countries, inner=S) .* "__" .* repeat(industries, outer=N)
 df_tariff_matrix = DataFrame([rows τ_Z], ["reporter"; countries])
-XLSX.writetable(dir * "WTO/tariff_matrix_" * string(year) * ".xlsx", df_tariff_matrix, overwrite=true)
+XLSX.writetable(dir_raw * "WTO/tariff_matrix_" * string(year) * ".xlsx", df_tariff_matrix, overwrite=true)

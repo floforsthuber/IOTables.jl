@@ -14,14 +14,13 @@ using DataFrames, RData, XLSX, LinearAlgebra, Statistics, CSV
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-dir = "C:/Users/u0148308/data/raw/" # location of raw data
-
 # Data specification
+dir_raw = "C:/Users/u0148308/data/raw/" # location of raw data
 
 # WIOD rev. 2013
 source = "WIOD"
 revision = "2013"
-year = 1995 # specified year
+year = 2011 # specified year
 N = 41 # number of countries 
 S = 35 # number of industries
 
@@ -32,11 +31,18 @@ S = 35 # number of industries
 # N = 44 # number of countries 
 # S = 56 # number of industries
 
+# # OECD rev. 2021
+# source = "OECD"
+# revision = "2021"
+# year = 1995 # specified year
+# N = 71 # number of countries 
+# S = 45 # number of industries
+
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # prepare tariff data from WTO for EU
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-path = dir * "WTO/EU_2018_MFN_BPT.csv"
+path = dir_raw * "WTO/EU_2018_MFN_BPT.csv"
 
 df2 = CSV.read(path, DataFrame, delim=',', quoted=true, quotechar='"')
 
@@ -182,13 +188,13 @@ wto_ctry = ["AUS", "BRA", "CAN", "CHN", "IDN", "IND", "JPN", "KOR", "MEX", "RUS"
 
 for i in wto_ctry
     if i in ["RUS", "TUR"] # data for 2018 not available
-        path = dir * "WTO/" * i * "_2019_MFN_BPT.csv"
+        path = dir_raw * "WTO/" * i * "_2019_MFN_BPT.csv"
         append!(df, transform_wto_data(i, path))
     elseif i in ["BRA", "IND", "MEX"] # ctrys without preferential trade agreements
-        path = dir * "WTO/" * i * "_2018_MFN.csv"
+        path = dir_raw * "WTO/" * i * "_2018_MFN.csv"
         append!(df, transform_wto_data(i, path))
     else
-        path = dir * "WTO/" * i * "_2018_MFN_BPT.csv"
+        path = dir_raw * "WTO/" * i * "_2018_MFN_BPT.csv"
         append!(df, transform_wto_data(i, path))
     end
 end
@@ -244,4 +250,4 @@ end
 # export
 rows = repeat(countries, inner=S) .* "__" .* repeat(industries, outer=N)
 df_tariff_matrix = DataFrame([rows τ_Z], ["reporter"; countries])
-XLSX.writetable(dir * "WTO/tariff_matrix.xlsx", df_tariff_matrix, overwrite=true)
+XLSX.writetable(dir_raw * "WTO/tariff_matrix.xlsx", df_tariff_matrix, overwrite=true)

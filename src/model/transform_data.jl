@@ -2,7 +2,6 @@
 # Script with functions to import and transform raw data
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-
 # --------------- Raw data ---------------------------------------------------------------------------------------------------------------------------------
 
 """
@@ -36,14 +35,16 @@ function import_data(dir::String, source::String, revision::String, year::Intege
         
         if revision == "2021"
             
+            # still need to sort out the issue with China and Mexico being split into two!
+
             file = source * "/" * revision * "/"
             path = ifelse(contains(dir[end-5:end], '.'), dir, dir * file)
 
             time = 1995:2018
             index = findfirst(time .== year) # get index of specified year
 
-            Z = RData.load(path * "ICIO2021econCONS" * ".RData")["ICIO2021econCONS"][index,:,:] # replace with proper file, could not access OECD website?
-            F = RData.load(path * "ICIO2021econFD" * ".RData")["ICIO2021econFD"][index,:,:] # total final demand (with inventory)
+            Z = RData.load(path * "ICIO2021econZ" * ".RData")["ICIO2021econZ"][index,:,:]
+            F = RData.load(path * "ICIO2021econFD" * ".RData")["ICIO2021econFD"][index,:,:]
             IV = RData.load(path * "ICIO2021econINVNT" * ".RData")["ICIO2021econINVNT"][index,:,:]
 
             F = F .- IV # take out inventory from final demand
@@ -81,7 +82,10 @@ function import_data(dir::String, source::String, revision::String, year::Intege
         inventory_columns = N*S+5:5:N*S+5*N
         
         Z = IO_table[:, 1:N*S] # NS×NS
+
         F = IO_table[:, Not([1:N*S; inventory_columns])] # NS×4N
+        F = [sum(F[i,j:j+3]) for i in 1:N*S, j in 1:4:N*4] # NS×N, sum all types of final demand
+
         IV = IO_table[:, inventory_columns] # NS×N
     
         println(" ✓ Raw data from $source (rev. $revision) for $year was successfully imported!")
@@ -107,14 +111,12 @@ The function performs the inventory adjustment procedure proposed in Antras et a
 - `S::Integer`: number of origin/destination industries.
 
 # Output
-- `Z::Matrix{Float64}`: NS×NS, origin country-industry destination country-industry intermediate demand matrix Z.
-- `F::Matrix{Float64}`: NS×N, origin country-industry destination country final demand matrix F.
-- `Y::Vector{Float64}`: NS×1, inventory adjusted country-industry gross output vector Y.
-- `VA::Vector{Float64}`: NS×1, country-industry value added vector VA.
+- `Z::Matrix{Float64}`: NS×NS, inventory adjusted origin country-industry destination country-industry intermediate demand matrix Z.
+- `F::Matrix{Float64}`: NS×N, inventory adjusted origin country-industry destination country final demand matrix F.
 
 # Examples
 ```julia-repl
-julia> Z, F, Y, VA = inventory_adjustment(Z, F, IV, N, S)
+julia> Z, F = inventory_adjustment(Z, F, IV, N, S)
 ```
 """
 
@@ -141,21 +143,54 @@ function inventory_adjustment(Z::Matrix, F::Matrix, IV::Matrix, N::Integer, S::I
     Z = ifelse.(isinf.(Z), 0.0, Z)
     Z = ifelse.(Z .< 0.0, 0.0, Z) # NS×NS
 
-    F = F .* ( repeat(Y, 1, N*4) ./ repeat(adjustment, 1, N*4) ) # NS×N*4, inventory adjustment
+    F = F .* ( repeat(Y, 1, N) ./ repeat(adjustment, 1, N) ) # NS×N, inventory adjustment
     F = ifelse.(isnan.(F), 0.0, F)
     F = ifelse.(isinf.(F), 0.0, F)
-    F = ifelse.(F .< 0.0, 0.0, F)
-    F = [sum(F[i,j:j+3]) for i in 1:N*S, j in 1:4:N*4] # NS×N, sum all types of final demand
+    F = ifelse.(F .< 0.0, 0.0, F) # NS×N
+    
+    return Z, F
+end
 
-    # Use computed values for Y and VA to have internal consistency
+
+# ---------------
+
+
+"""
+    consistency_adjustment(Z::Matrix, F::Matrix, N::Integer, S::Integer)
+
+The function performs the value added adjustment which borrows from the inventory adjustment procedure proposed in Antras et al. (2012). This makes sure that 
+    no entries of the value added vector is negative and that the system of Z, F, Y and VA is internally consistent, i.e. 
+    Z + F = Y_exports = Y_imports = Z + VA.
+
+
+# Arguments
+- `Z::Matrix`: NS×NS, raw origin country-industry destination country-industry intermediate demand matrix Z.
+- `F::Matrix`: NS×N, raw origin country-industry destination country final demand matrix F.
+- `IV::Matrix`: NS×N, raw origin country-industry destination country inventory adjustment matrix IV.
+- `N::Integer`: number of origin/destination countries.
+- `S::Integer`: number of origin/destination industries.
+
+# Output
+- `Z::Matrix{Float64}`: NS×NS, consistent origin country-industry destination country-industry intermediate demand matrix Z.
+- `F::Matrix{Float64}`: NS×N, consistent origin country-industry destination country final demand matrix F.
+- `Y::Vector{Float64}`: NS×1, consistent country-industry gross output vector Y.
+- `VA::Vector{Float64}`: NS×1, consistent country-industry value added vector VA.
+
+# Examples
+```julia-repl
+julia> Z, F, Y, VA = consistency_adjustment(Z, F, IV, N, S)
+```
+"""
+
+function consistency_adjustment(Z::Matrix, F::Matrix, N::Integer, S::Integer)
+
+    # Recompute values for Y and VA to have internal consistency
     Y = [sum(Z[i,:]) + sum(F[i,:]) for i in 1:N*S] # NS×1
-
     VA = [Y[i] - sum(Z[:,i]) for i in 1:N*S] # NS×1, compute value added (gross output minus sum of inputs)
-    #VA = ifelse.(VA .< 0.0, 0.0, VA) # in case one is negative (actually problematic since Z, F, Y internally consistent but not VA)
+    #VA = ifelse.(VA .< 0.0, 0.0, VA) # in case one is negative (actually problematic since Z, F, Y internally consistent but not VA!)
 
-    # -------------
-
-    # adjust Z for negative VA values in order to have internal consistency, i.e. Y_exports == Y_imports+VA 
+    # value added adjustment
+    # adjust Z for negative VA values in order to have internal consistency, i.e. Z + F = Y_exports = Y_imports = Z + VA
     adjustment = ifelse.(VA .< 0.0, VA, 0.0) # spread only negative values
     adjustment = Y .- adjustment
     adjustment = ifelse.(adjustment .< 0.0, 0.0, adjustment)
@@ -288,9 +323,6 @@ function create_input_shares(Z::Matrix, F::Matrix, Y::Vector, VA::Vector, π_Z::
 
     # Country-industry final import expenditure shares (columns sum to 1)
     α = [sum(F[i:S:(N-1)*S+i, j])/F_ctry[j] for i in 1:S, j in 1:N] # S×N
-
-    # α = [sum(F[i:S:(N-1)*S+i, j])/(VA_ctry[j]+TB_ctry[j]) for i in 1:S, j in 1:N] # used in paper, problem when TB=0?
-
     α = ifelse.(isnan.(α), 0.0, α) # needed in case F_ctry = 0 (unlikely since all entries in F >= 0, but still necessary)
     !any(0.0 .<= α .<= 1.0) && println(" × Problem! Not all elements in γ are in intervall [0, 1]")
 
@@ -351,7 +383,8 @@ julia> Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transfo
 function transform_data(dir::String, source::String, revision::String, year::Integer, N::Integer, S::Integer)
 
     Z, F, IV = import_data(dir, source, revision, year, N, S)
-    Z, F, Y, VA = inventory_adjustment(Z, F, IV, N, S)
+    Z, F = inventory_adjustment(Z, F, IV, N, S)
+    Z, F, Y, VA = consistency_adjustment(Z, F, N, S)
     π_Z, π_F = create_expenditure_shares(Z, F, N, S)
     γ, α, VA_coeff, TB_ctry, VA_ctry, F_ctry = create_input_shares(Z, F, Y, VA, π_Z, π_F, N, S)
 

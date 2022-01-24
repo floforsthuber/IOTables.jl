@@ -106,3 +106,72 @@ function ctry_aggregation(Z::Matrix, F::Matrix, N::Integer, S::Integer,
 
     return Z_new, F_new
 end
+
+
+
+
+
+# ---------------- aggregation in one function --------------------------------------------------------------------------------------------------------------------------
+
+"""
+    ctry_aggregation(Z::Matrix, F::Matrix, N::Integer, S::Integer, ctry_all::Vector{String}, ctry_subset::Vector{String})
+
+The function creates new intermediate and final demand matrices by aggregating the countries in the vector "ctry_subset". The aggregation only works for 
+    countries not for industries.
+
+# Arguments
+- `Z::Matrix`: NS×NS, origin country-industry destination country-industry intermediate demand matrix Z.
+- `F::Matrix`: NS×N, origin country-industry destination country final demand matrix F.
+- `N::Integer`: number of origin/destination countries.
+- `S::Integer`: number of origin/destination industries.
+- `ctry_all::Vector{String}`: ordered vector of all country names in IO table.
+- `ctry_subset::Vector{String}`: vector of country names to subset.
+
+# Output
+- `Z::Matrix`: N_new*S×N_new*S, new origin country-industry destination country-industry intermediate demand matrix Z.
+- `F::Matrix`: N_new*S×N_new, new origin country-industry destination country final demand matrix F.
+
+# Examples
+```julia-repl
+julia> Z_new, F_new = aggregation(Z, F, N, S, countries, ctry_EU)
+```
+"""
+
+function ctry_aggregation(Z::Matrix, F::Matrix, N::Integer, S::Integer, ctry_all::Vector{String}, ctry_subset::Vector{String})
+
+    # obtain indices for subsetting Z and F
+    N_subset = length(ctry_subset)
+    industries = lpad.(1:S, 2, '0') # vector of industries
+
+    all = repeat(ctry_all, inner=S) .* "_" .* repeat(industries, outer=N) # all row country-industry pairs
+    subset = repeat(ctry_subset, inner=S) .* "_" .* repeat(industries, outer=N_subset) # subset of country-industry pairs
+    
+    index_subset = findall(in(subset), all) # can be used for both rows and columns since IO table is a square matrix
+    index_subset_F = findall(in(ctry_subset), ctry_all) # only have countries in columns
+
+    # subset columns, construct aggregate and rebuild matrix
+    Z_col_subset = Z[:, index_subset]
+    Z_col_subset = [sum(Z_col_subset[i, j:S:(N_subset-1)*S+j]) for i in 1:N*S, j in 1:S] # sum over industries to create aggregate
+    Z_col_other = Z[:, Not(index_subset)] # other countries
+    Z_new = hcat(Z_col_other, Z_col_subset) # rebuild Z with new aggregate as last columns
+
+    F_col_subset = F[:, index_subset_F]
+    F_col_subset = [sum(F_col_subset[i,:]) for i in 1:N*S]
+    F_col_other = F[:, Not(index_subset_F)] # other countries
+    F_new = hcat(F_col_other, F_col_subset) # rebuild F with new aggregate as last column
+
+    # subset rows from new matrix, construct aggregate and rebuild matrix
+    N_new = size(F_new, 2) # new number of countries
+
+    Z_row_subset = Z_new[index_subset, :]
+    Z_row_subset = [sum(Z_row_subset[i:S:(N_subset-1)*S+i, j]) for i in 1:S, j in 1:N_new*S]
+    Z_row_other = Z_new[Not(index_subset), :]
+    Z_new = vcat(Z_row_other, Z_row_subset)
+
+    F_row_subset = F_new[index_subset, :]
+    F_row_subset = [sum(F_row_subset[i:S:(N_subset-1)*S+i, j]) for i in 1:S, j in 1:N_new]
+    F_row_other = F_new[Not(index_subset), :]
+    F_new = vcat(F_row_other, F_row_subset)
+
+    return Z_new, F_new
+end

@@ -11,14 +11,13 @@ include(dir * "model/wage_hat.jl") # Script with function to obtain the wages an
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-dir = "C:/Users/u0148308/data/raw/" # location of raw data
-
 # Data specification
+dir_raw = "C:/Users/u0148308/data/raw/" # location of raw data
 
 # WIOD rev. 2013
 source = "WIOD"
 revision = "2013"
-year = 1995 # specified year
+year = 2011 # specified year
 N = 41 # number of countries 
 S = 35 # number of industries
 
@@ -29,10 +28,18 @@ S = 35 # number of industries
 # N = 44 # number of countries 
 # S = 56 # number of industries
 
+# # OECD rev. 2021
+# source = "OECD"
+# revision = "2021"
+# year = 1995 # specified year
+# N = 71 # number of countries 
+# S = 45 # number of industries
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, source, revision, year, N, S)
+Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir_raw, source, revision, year, N, S)
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # iteration parameters
 vfactor = 0.4

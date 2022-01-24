@@ -11,9 +11,8 @@ include(dir * "model/transform_data.jl") # Script with functions to import and t
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-dir = "C:/Users/u0148308/data/raw/" # location of raw data
-
 # Data specification
+dir_raw = "C:/Users/u0148308/data/raw/" # location of raw data
 
 # WIOD rev. 2013
 source = "WIOD"
@@ -29,11 +28,19 @@ S = 35 # number of industries
 # N = 44 # number of countries 
 # S = 56 # number of industries
 
+# # OECD rev. 2021
+# source = "OECD"
+# revision = "2021"
+# year = 1995 # specified year
+# N = 71 # number of countries 
+# S = 45 # number of industries
+
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir, source, revision, year, N, S)
+Z, F, Y, F_ctry, TB_ctry, VA_ctry, VA_coeff, γ, α, π_Z, π_F = transform_data(dir_raw, source, revision, year, N, S)
 
-# -------
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 ctry_names = ["AUS", "AUT", "BEL", "BGR", "BRA", "CAN", "CHN", "CYP", "CZE", "DEU", "DNK", "ESP", "EST", "FIN", "FRA", "GBR", 
     "GRC", "HUN", "IDN", "IND", "IRL", "ITA", "JPN", "KOR", "LTU", "LUX", "LVA", "MEX", "MLT", "NLD", "POL", "PRT", "ROM", "RUS", 
@@ -104,48 +111,49 @@ function ctry_aggregation(Z::Matrix, F::Matrix, N::Integer, S::Integer,
 end
 
 
-a, b = aggregation(Z, F, N, S, countries, ctry_EU, industries, industries)
+a, b = ctry_aggregation(Z, F, N, S, countries, ctry_EU, industries, industries)
 
 
+function ctry_aggregation(Z::Matrix, F::Matrix, N::Integer, S::Integer, ctry_all::Vector{String}, ctry_subset::Vector{String})
 
-# function subset(N::Integer, S::Integer, 
-#     ctry_all::Vector{String}, ctry_subset::Vector{String}, ind_all::Vector{String}, ind_subset::Vector{String})
+    # obtain indices for subsetting Z and F
+    N_subset = length(ctry_subset)
+    industries = lpad.(1:S, 2, '0') # vector of industries
+
+    all = repeat(ctry_all, inner=S) .* "_" .* repeat(industries, outer=N) # all row country-industry pairs
+    subset = repeat(ctry_subset, inner=S) .* "_" .* repeat(industries, outer=N_subset) # subset of country-industry pairs
     
-#     # subsetting rows
-#     N_subset = length(ctry_subset)
-#     S_subset = length(ind_subset)
+    index_subset = findall(in(subset), all) # can be used for both rows and columns since IO table is a square matrix
+    index_subset_F = findall(in(ctry_subset), ctry_all) # only have countries in columns
 
-#     all = repeat(ctry_all, inner=S) .* "_" .* repeat(ind_all, outer=N) # all row country-industry pairs
-#     subset = repeat(ctry_subset, inner=S_subset) .* "_" .* repeat(ind_subset, outer=N_subset) # subset of country-industry pairs
-#     index_subset = findall(in(subset), all)
+    # subset columns, construct aggregate and rebuild matrix
+    Z_col_subset = Z[:, index_subset]
+    Z_col_subset = [sum(Z_col_subset[i, j:S:(N_subset-1)*S+j]) for i in 1:N*S, j in 1:S] # sum over industries to create aggregate
+    Z_col_other = Z[:, Not(index_subset)] # other countries
+    Z_new = hcat(Z_col_other, Z_col_subset) # rebuild Z with new aggregate as last columns
 
-#     return index_subset
-# end
+    F_col_subset = F[:, index_subset_F]
+    F_col_subset = [sum(F_col_subset[i,:]) for i in 1:N*S]
+    F_col_other = F[:, Not(index_subset_F)] # other countries
+    F_new = hcat(F_col_other, F_col_subset) # rebuild F with new aggregate as last column
 
-# row_index_EU_Z = subset(N, S, countries, ctry_EU, industries, industries)
-# col_index_EU_Z = subset(N, S, countries, ctry_EU, industries, industries)
-# col_index_EU_F = findall(in(ctry_EU), countries)
+    # subset rows from new matrix, construct aggregate and rebuild matrix
+    N_new = size(F_new, 2) # new number of countries
 
-# col_n_subset = length(ctry_EU)
-# col_s_subset = length(industries)
+    Z_row_subset = Z_new[index_subset, :]
+    Z_row_subset = [sum(Z_row_subset[i:S:(N_subset-1)*S+i, j]) for i in 1:S, j in 1:N_new*S]
+    Z_row_other = Z_new[Not(index_subset), :]
+    Z_new = vcat(Z_row_other, Z_row_subset)
 
-# row_n_subset = length(ctry_EU)
-# row_s_subset = length(industries)
+    F_row_subset = F_new[index_subset, :]
+    F_row_subset = [sum(F_row_subset[i:S:(N_subset-1)*S+i, j]) for i in 1:S, j in 1:N_new]
+    F_row_other = F_new[Not(index_subset), :]
+    F_new = vcat(F_row_other, F_row_subset)
 
+    return Z_new, F_new
+end
 
-# Z_col_subset = Z[:, col_index_EU_Z]
-# Z_col_EU = [sum(Z_col_subset[i,j:col_s_subset:(col_n_subset-1)*col_s_subset+j]) for i in 1:N*S, j in 1:col_s_subset]
+c, d = ctry_aggregation(Z, F, N, S, countries, ctry_EU)
 
-# Z_col_NOT = Z[:, Not(col_index_EU_Z)]
-
-# Z_col_new = hcat(Z_col_NOT, Z_col_EU) # now last 35 cols are EU aggregate
-
-# n_NOT = length(countries[findall(!in(ctry_EU), countries)])
-
-# Z_row_subset = Z_col_new[row_index_EU_Z,:]
-# Z_row_EU = [sum(Z_row_subset[i:row_s_subset:(row_n_subset-1)*row_s_subset+i,j]) for i in 1:row_s_subset, j in 1:(n_NOT+1)*row_s_subset] # only EU to EU intermediate
-
-# Z_row_NOT = Z_col_new[Not(row_index_EU_Z),:]
-
-# Z_new = vcat(Z_row_NOT, Z_row_EU)
-
+println(a == c)
+println(b == d)
